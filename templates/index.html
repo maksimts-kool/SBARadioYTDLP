@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en" class="antialiased">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AzuraCast Downloader</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .checkmark {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            display: block;
+            stroke-width: 2;
+            stroke: #fff;
+            margin: 10% auto;
+            box-shadow: inset 0px 0px 0px #10b981;
+            animation: fill .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both;
+        }
+
+        .checkmark-circle {
+            stroke-dasharray: 166;
+            stroke-dashoffset: 166;
+            stroke-width: 2;
+            stroke-miterlimit: 10;
+            stroke: #10b981;
+            fill: none;
+            animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+        }
+
+        .checkmark-check {
+            transform-origin: 50% 50%;
+            stroke-dasharray: 48;
+            stroke-dashoffset: 48;
+            animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards;
+        }
+
+        @keyframes stroke {
+            100% {
+                stroke-dashoffset: 0;
+            }
+        }
+
+        @keyframes scale {
+
+            0%,
+            100% {
+                transform: none;
+            }
+
+            50% {
+                transform: scale3d(1.1, 1.1, 1);
+            }
+        }
+
+        @keyframes fill {
+            100% {
+                box-shadow: inset 0px 0px 0px 30px #10b981;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 text-slate-800 min-h-screen py-10 px-4">
+
+    <div class="max-w-5xl mx-auto">
+        <div class="text-center mb-10">
+            <h1 class="text-3xl font-bold text-slate-900">AzuraCast <span class="text-indigo-600">Sync</span></h1>
+        </div>
+
+        <div id="configSection"
+            class="bg-white rounded-xl shadow-sm border border-slate-200 mb-8 overflow-hidden transition-all">
+            <div class="bg-slate-50 px-6 py-4 border-b border-slate-200">
+                <h2 class="font-semibold text-slate-700">Configuration</h2>
+            </div>
+            <div class="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div><label class="block text-sm font-medium text-slate-700">Station ID</label><input type="text"
+                        id="stationId" value="{{ config.STATION_ID }}"
+                        class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border p-2">
+                </div>
+                <div><label class="block text-sm font-medium text-slate-700">API Key</label><input type="password"
+                        id="apiKey" value="{{ config.API_KEY }}"
+                        class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border p-2">
+                </div>
+                <div class="sm:col-span-2"><label class="block text-sm font-medium text-slate-700">Playlist
+                        URL</label><input type="text" id="playlistUrl" value="{{ config.PLAYLIST_URL }}"
+                        class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border p-2">
+                </div>
+                <div class="sm:col-span-2"><label class="block text-sm font-medium text-slate-700">Download
+                        Dir</label><input type="text" id="downloadDir" value="{{ config.DOWNLOAD_DIR }}"
+                        class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border p-2">
+                </div>
+                <div class="sm:col-span-2 text-right"><button id="btnAnalyze"
+                        class="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 transition">1. Analyze
+                        Playlist</button></div>
+            </div>
+        </div>
+
+        <div id="resultsSection"
+            class="hidden bg-white rounded-xl shadow-sm border border-slate-200 mb-8 overflow-hidden">
+            <div class="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                <h3 class="font-semibold text-slate-700">Scan Results</h3>
+                <button id="btnDownload"
+                    class="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 transition">2. Download
+                    Selected</button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-slate-200">
+                    <thead class="bg-slate-50 text-xs text-slate-500 uppercase">
+                        <tr>
+                            <th class="px-6 py-3 text-left"><input type="checkbox" id="checkAll"></th>
+                            <th class="px-6 py-3 text-left">Status</th>
+                            <th class="px-6 py-3 text-left">Artist</th>
+                            <th class="px-6 py-3 text-left"></th>
+                            <th class="px-6 py-3 text-left">Title</th>
+                            <th class="px-6 py-3 text-left">Info</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tracksTable" class="divide-y divide-slate-200"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="statusSection" class="hidden bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center">
+            <div id="activeDownload">
+                <h3 class="text-lg font-medium mb-6" id="currentTask">Preparing...</h3>
+                <div class="max-w-xl mx-auto space-y-6 text-left">
+                    <div>
+                        <div class="flex justify-between text-sm mb-1"><span>Total Queue</span><span
+                                id="totalText">0/0</span></div>
+                        <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                            <div id="totalProgressBar" class="bg-indigo-600 h-full transition-all" style="width:0%">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <div class="flex justify-between text-xs mb-1"><span id="currentPercentText">0%</span><span
+                                id="downloadSpeed">--</span></div>
+                        <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                            <div id="currentProgressBar" class="bg-emerald-500 h-full transition-all" style="width:0%">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="successAnimation" class="hidden">
+                <svg class="checkmark" viewBox="0 0 52 52">
+                    <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none" />
+                    <path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" />
+                </svg>
+                <h4 class="text-xl font-bold text-emerald-600 mt-4">Finished!</h4>
+                <button onclick="location.reload()"
+                    class="mt-6 text-slate-600 border px-4 py-2 rounded hover:bg-slate-50">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let analyzedTracks = [];
+
+        document.getElementById('btnAnalyze').addEventListener('click', async () => {
+            const btn = document.getElementById('btnAnalyze');
+            btn.disabled = true; btn.innerText = "Analyzing...";
+            const payload = { station_id: document.getElementById('stationId').value, api_key: document.getElementById('apiKey').value, playlist_url: document.getElementById('playlistUrl').value, download_dir: document.getElementById('downloadDir').value };
+            try {
+                const response = await fetch('/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const data = await response.json();
+                analyzedTracks = data.tracks;
+                renderTable(analyzedTracks);
+                document.getElementById('resultsSection').classList.remove('hidden');
+            } catch (e) { alert("Failed: " + e); }
+            finally { btn.disabled = false; btn.innerText = "1. Analyze Playlist"; }
+        });
+
+        function renderTable(tracks) {
+            const tbody = document.getElementById('tracksTable'); tbody.innerHTML = '';
+            tracks.forEach((track, index) => {
+                const tr = document.createElement('tr');
+                const isBlocked = track.status === 'skip' || track.status === 'file_exists';
+                let badge = `<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">New</span>`;
+                if (track.status === 'skip') badge = `<span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-xs">Exists</span>`;
+                if (track.status === 'file_exists') badge = `<span class="bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full text-xs">On Disk</span>`;
+                if (track.status === 'warning') badge = `<span class="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-xs">Warning</span>`;
+
+                tr.className = isBlocked ? "opacity-60 bg-slate-50" : "hover:bg-slate-50 transition";
+                tr.innerHTML = `
+                    <td class="px-6 py-4"><input type="checkbox" class="track-check" data-index="${index}" ${!isBlocked ? 'checked' : ''} ${isBlocked ? 'disabled' : ''}></td>
+                    <td class="px-6 py-4">${badge}</td>
+                    <td class="px-6 py-4"><input type="text" class="edit-artist bg-transparent w-full text-sm border-none focus:ring-0" value="${track.clean_artist}" data-index="${index}" ${isBlocked ? 'disabled' : ''}></td>
+                    <td class="px-1"><button onclick="swap(${index})" class="p-1 hover:bg-slate-200 rounded ${isBlocked ? 'hidden' : ''}" title="Swap Artist/Title">⇄</button></td>
+                    <td class="px-6 py-4"><input type="text" class="edit-title bg-transparent w-full text-sm border-none focus:ring-0" value="${track.title}" data-index="${index}" ${isBlocked ? 'disabled' : ''}></td>
+                    <td class="px-6 py-4 text-xs text-slate-400">${track.message}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        window.swap = (index) => {
+            const temp = analyzedTracks[index].clean_artist;
+            analyzedTracks[index].clean_artist = analyzedTracks[index].title;
+            analyzedTracks[index].title = temp;
+            renderTable(analyzedTracks);
+        };
+
+        document.getElementById('tracksTable').addEventListener('input', (e) => {
+            if (e.target.classList.contains('edit-artist')) analyzedTracks[e.target.dataset.index].clean_artist = e.target.value;
+            if (e.target.classList.contains('edit-title')) analyzedTracks[e.target.dataset.index].title = e.target.value;
+        });
+
+        document.getElementById('checkAll').addEventListener('change', (e) => {
+            document.querySelectorAll('.track-check:not(:disabled)').forEach(cb => cb.checked = e.target.checked);
+        });
+
+        document.getElementById('btnDownload').addEventListener('click', async () => {
+            const selected = Array.from(document.querySelectorAll('.track-check:checked')).map(cb => analyzedTracks[cb.dataset.index]);
+            if (!selected.length) return alert("None selected");
+
+            document.getElementById('configSection').classList.add('hidden');
+            document.getElementById('resultsSection').classList.add('hidden');
+            document.getElementById('statusSection').classList.remove('hidden');
+
+            const total = selected.length; let done = 0;
+            const response = await fetch('/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tracks: selected, download_dir: document.getElementById('downloadDir').value }) });
+            const reader = response.body.getReader(); const decoder = new TextDecoder();
+
+            while (true) {
+                const { value, done: finished } = await reader.read(); if (finished) break;
+                const lines = decoder.decode(value).split("\n");
+                lines.forEach(line => {
+                    if (line.includes("Processing:")) document.getElementById('currentTask').innerText = line.replace("Processing:", "");
+                    if (line.includes("SUCCESS:")) { done++; document.getElementById('totalProgressBar').style.width = (done / total * 100) + '%'; document.getElementById('totalText').innerText = `${done}/${total}`; }
+                    const m = line.match(/(\d+\.\d+)%\s+of\s+.*?\s+at\s+(.*?)\s+ETA\s+(.*)/);
+                    if (m) { document.getElementById('currentProgressBar').style.width = m[1] + '%'; document.getElementById('currentPercentText').innerText = m[1] + '%'; document.getElementById('downloadSpeed').innerText = m[2]; }
+                });
+            }
+            document.getElementById('activeDownload').classList.add('hidden');
+            document.getElementById('successAnimation').classList.remove('hidden');
+        });
+    </script>
+</body>
+
+</html>
