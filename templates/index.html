@@ -104,26 +104,49 @@
 
         <div id="resultsSection"
             class="hidden bg-white rounded-xl shadow-sm border border-slate-200 mb-8 overflow-hidden">
-            <div class="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+            <div
+                class="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center flex-wrap gap-4">
                 <h3 class="font-semibold text-slate-700">Scan Results</h3>
                 <button id="btnDownload"
                     class="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 transition">2. Download
                     Selected</button>
             </div>
+
+            <div class="bg-white px-6 py-3 border-b border-slate-100 flex gap-2 overflow-x-auto">
+                <button onclick="setFilter('all')"
+                    class="filter-btn active px-3 py-1 rounded-full text-xs font-medium border transition-colors bg-slate-800 text-white border-slate-800"
+                    data-filter="all">All</button>
+                <button onclick="setFilter('ok')"
+                    class="filter-btn px-3 py-1 rounded-full text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50"
+                    data-filter="ok">New</button>
+                <button onclick="setFilter('warning')"
+                    class="filter-btn px-3 py-1 rounded-full text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50"
+                    data-filter="warning">Warning</button>
+                <button onclick="setFilter('skip')"
+                    class="filter-btn px-3 py-1 rounded-full text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50"
+                    data-filter="skip">Exists</button>
+                <button onclick="setFilter('file_exists')"
+                    class="filter-btn px-3 py-1 rounded-full text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50"
+                    data-filter="file_exists">On Disk</button>
+            </div>
+
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-slate-200">
                     <thead class="bg-slate-50 text-xs text-slate-500 uppercase">
                         <tr>
-                            <th class="px-6 py-3 text-left"><input type="checkbox" id="checkAll"></th>
-                            <th class="px-6 py-3 text-left">Status</th>
+                            <th class="px-6 py-3 text-left w-10"><input type="checkbox" id="checkAll"></th>
+                            <th class="px-6 py-3 text-left w-24">Status</th>
                             <th class="px-6 py-3 text-left">Artist</th>
-                            <th class="px-6 py-3 text-left"></th>
+                            <th class="px-6 py-3 text-left w-10"></th>
                             <th class="px-6 py-3 text-left">Title</th>
                             <th class="px-6 py-3 text-left">Info</th>
                         </tr>
                     </thead>
                     <tbody id="tracksTable" class="divide-y divide-slate-200"></tbody>
                 </table>
+                <div id="emptyState" class="hidden py-8 text-center text-slate-400 text-sm">
+                    No tracks match this filter.
+                </div>
             </div>
         </div>
 
@@ -163,6 +186,7 @@
 
     <script>
         let analyzedTracks = [];
+        let currentFilter = 'all';
 
         document.getElementById('btnAnalyze').addEventListener('click', async () => {
             const btn = document.getElementById('btnAnalyze');
@@ -172,15 +196,54 @@
                 const response = await fetch('/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 const data = await response.json();
                 analyzedTracks = data.tracks;
-                renderTable(analyzedTracks);
+
+                // Reset filter to All on new analysis
+                currentFilter = 'all';
+                updateFilterButtons();
+
+                renderTable();
                 document.getElementById('resultsSection').classList.remove('hidden');
             } catch (e) { alert("Failed: " + e); }
             finally { btn.disabled = false; btn.innerText = "1. Analyze Playlist"; }
         });
 
-        function renderTable(tracks) {
-            const tbody = document.getElementById('tracksTable'); tbody.innerHTML = '';
-            tracks.forEach((track, index) => {
+        function setFilter(filter) {
+            currentFilter = filter;
+            updateFilterButtons();
+            renderTable();
+        }
+
+        function updateFilterButtons() {
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                if (btn.dataset.filter === currentFilter) {
+                    btn.className = "filter-btn active px-3 py-1 rounded-full text-xs font-medium border transition-colors bg-slate-800 text-white border-slate-800";
+                } else {
+                    btn.className = "filter-btn px-3 py-1 rounded-full text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50";
+                }
+            });
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('tracksTable');
+            tbody.innerHTML = '';
+
+            // Filter logic
+            const visibleTracks = analyzedTracks.filter(track => {
+                if (currentFilter === 'all') return true;
+                return track.status === currentFilter;
+            });
+
+            if (visibleTracks.length === 0) {
+                document.getElementById('emptyState').classList.remove('hidden');
+                return;
+            } else {
+                document.getElementById('emptyState').classList.add('hidden');
+            }
+
+            visibleTracks.forEach((track) => {
+                // Find original index to ensure editing works on the main array
+                const originalIndex = analyzedTracks.indexOf(track);
+
                 const tr = document.createElement('tr');
                 const isBlocked = track.status === 'skip' || track.status === 'file_exists';
                 let badge = `<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">New</span>`;
@@ -190,22 +253,31 @@
 
                 tr.className = isBlocked ? "opacity-60 bg-slate-50" : "hover:bg-slate-50 transition";
                 tr.innerHTML = `
-                    <td class="px-6 py-4"><input type="checkbox" class="track-check" data-index="${index}" ${!isBlocked ? 'checked' : ''} ${isBlocked ? 'disabled' : ''}></td>
+                    <td class="px-6 py-4"><input type="checkbox" class="track-check" data-index="${originalIndex}" ${!isBlocked ? 'checked' : ''} ${isBlocked ? 'disabled' : ''}></td>
                     <td class="px-6 py-4">${badge}</td>
-                    <td class="px-6 py-4"><input type="text" class="edit-artist bg-transparent w-full text-sm border-none focus:ring-0" value="${track.clean_artist}" data-index="${index}" ${isBlocked ? 'disabled' : ''}></td>
-                    <td class="px-1"><button onclick="swap(${index})" class="p-1 hover:bg-slate-200 rounded ${isBlocked ? 'hidden' : ''}" title="Swap Artist/Title">⇄</button></td>
-                    <td class="px-6 py-4"><input type="text" class="edit-title bg-transparent w-full text-sm border-none focus:ring-0" value="${track.title}" data-index="${index}" ${isBlocked ? 'disabled' : ''}></td>
-                    <td class="px-6 py-4 text-xs text-slate-400">${track.message}</td>
+                    <td class="px-6 py-4"><input type="text" class="edit-artist bg-transparent w-full text-sm border-none focus:ring-0" value="${track.clean_artist}" data-index="${originalIndex}" ${isBlocked ? 'disabled' : ''}></td>
+                    <td class="px-1"><button onclick="swap(${originalIndex})" class="p-1 hover:bg-slate-200 rounded ${isBlocked ? 'hidden' : ''}" title="Swap Artist/Title">⇄</button></td>
+                    <td class="px-6 py-4"><input type="text" class="edit-title bg-transparent w-full text-sm border-none focus:ring-0" value="${track.title}" data-index="${originalIndex}" ${isBlocked ? 'disabled' : ''}></td>
+                    <td class="px-6 py-4 text-xs text-slate-400 max-w-xs truncate" title="${track.message}">${track.message}</td>
                 `;
                 tbody.appendChild(tr);
             });
+
+            // Re-sync "Check All" box state based on visible checkboxes
+            const visibleCheckboxes = document.querySelectorAll('.track-check:not(:disabled)');
+            if (visibleCheckboxes.length > 0) {
+                const allChecked = Array.from(visibleCheckboxes).every(c => c.checked);
+                document.getElementById('checkAll').checked = allChecked;
+            } else {
+                document.getElementById('checkAll').checked = false;
+            }
         }
 
         window.swap = (index) => {
             const temp = analyzedTracks[index].clean_artist;
             analyzedTracks[index].clean_artist = analyzedTracks[index].title;
             analyzedTracks[index].title = temp;
-            renderTable(analyzedTracks);
+            renderTable();
         };
 
         document.getElementById('tracksTable').addEventListener('input', (e) => {
@@ -214,10 +286,12 @@
         });
 
         document.getElementById('checkAll').addEventListener('change', (e) => {
+            // Only toggle currently visible checkboxes
             document.querySelectorAll('.track-check:not(:disabled)').forEach(cb => cb.checked = e.target.checked);
         });
 
         document.getElementById('btnDownload').addEventListener('click', async () => {
+            // Only select checked boxes that are currently in the DOM (respects filter)
             const selected = Array.from(document.querySelectorAll('.track-check:checked')).map(cb => analyzedTracks[cb.dataset.index]);
             if (!selected.length) return alert("None selected");
 
