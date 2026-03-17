@@ -1,26 +1,527 @@
 <!DOCTYPE html>
-<html lang="en" class="antialiased">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AzuraCast Downloader</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
     <style>
+        :root {
+            --bg: #f4f1e8;
+            --surface: rgba(255, 252, 246, 0.88);
+            --surface-strong: #fffdf8;
+            --surface-soft: #f8f4ec;
+            --line: rgba(43, 72, 101, 0.14);
+            --text: #213547;
+            --muted: #6c7b88;
+            --primary: #2f6c8f;
+            --primary-deep: #254f69;
+            --accent: #6eb9a6;
+            --accent-soft: #daf1ea;
+            --warn: #f0b35a;
+            --warn-soft: #fff0d6;
+            --danger: #d4705f;
+            --danger-soft: #fde5df;
+            --shadow: 0 22px 60px rgba(44, 57, 72, 0.12);
+            --radius-xl: 28px;
+            --radius-lg: 20px;
+            --radius-md: 14px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
         body {
-            font-family: 'Inter', sans-serif;
+            margin: 0;
+            min-height: 100vh;
+            font-family: 'Manrope', sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top left, rgba(110, 185, 166, 0.24), transparent 28%),
+                radial-gradient(circle at top right, rgba(47, 108, 143, 0.18), transparent 24%),
+                linear-gradient(180deg, #f8f4ea 0%, #f1ece1 100%);
+            padding: 32px 18px 56px;
+        }
+
+        button,
+        input {
+            font: inherit;
+        }
+
+        .page-shell {
+            max-width: 1180px;
+            margin: 0 auto;
+            animation: fade-up 0.9s ease both;
+        }
+
+        .hero {
+            position: relative;
+            overflow: hidden;
+            padding: 32px;
+            border: 1px solid rgba(255, 255, 255, 0.45);
+            border-radius: var(--radius-xl);
+            background: linear-gradient(145deg, rgba(255, 252, 246, 0.9), rgba(247, 241, 230, 0.84));
+            box-shadow: var(--shadow);
+            margin-bottom: 22px;
+        }
+
+        .hero::after {
+            content: "";
+            position: absolute;
+            inset: auto -100px -90px auto;
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(47, 108, 143, 0.18), transparent 66%);
+            pointer-events: none;
+        }
+
+        .hero-topline {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 7px 12px;
+            border-radius: 999px;
+            background: rgba(47, 108, 143, 0.08);
+            color: var(--primary-deep);
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .hero h1 {
+            margin: 18px 0 10px;
+            max-width: 620px;
+            font-size: clamp(2.4rem, 5vw, 4.6rem);
+            line-height: 0.96;
+            letter-spacing: -0.05em;
+        }
+
+        .hero p {
+            margin: 0;
+            max-width: 620px;
+            color: var(--muted);
+            font-size: 1rem;
+            line-height: 1.65;
+        }
+
+        .hero-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+            gap: 22px;
+            align-items: end;
+        }
+
+        .hero-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+            align-items: stretch;
+        }
+
+        .stat-card,
+        .panel,
+        .status-card {
+            border: 1px solid var(--line);
+            border-radius: var(--radius-lg);
+            background: var(--surface);
+            backdrop-filter: blur(16px);
+            box-shadow: 0 12px 32px rgba(46, 60, 74, 0.08);
+        }
+
+        .stat-card {
+            min-height: 130px;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            animation: float-in 0.8s ease both;
+        }
+
+        .stat-card:nth-child(2) {
+            animation-delay: 0.08s;
+        }
+
+        .stat-card:nth-child(3) {
+            animation-delay: 0.16s;
+        }
+
+        .stat-label {
+            display: block;
+            color: var(--muted);
+            font-size: 13px;
+            margin-bottom: 8px;
+            line-height: 1.3;
+        }
+
+        .stat-value {
+            font-size: clamp(1rem, 1.8vw, 1.5rem);
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            line-height: 1.15;
+            margin: 0;
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
+
+        .panel {
+            overflow: hidden;
+            margin-bottom: 18px;
+        }
+
+        .panel-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 18px 22px;
+            border-bottom: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.34);
+        }
+
+        .panel-title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+
+        .panel-subtitle {
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+            padding: 22px;
+        }
+
+        .field.full {
+            grid-column: 1 / -1;
+        }
+
+        .field label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .field input {
+            width: 100%;
+            border: 1px solid rgba(43, 72, 101, 0.12);
+            border-radius: var(--radius-md);
+            background: rgba(255, 255, 255, 0.8);
+            padding: 14px 16px;
+            color: var(--text);
+            outline: none;
+            transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .field input:focus {
+            border-color: rgba(47, 108, 143, 0.45);
+            box-shadow: 0 0 0 4px rgba(47, 108, 143, 0.12);
+            transform: translateY(-1px);
+        }
+
+        .actions {
+            display: flex;
+            justify-content: flex-end;
+            padding: 0 22px 22px;
+        }
+
+        .button {
+            border: 2px solid rgba(43, 72, 101, 0.22);
+            border-radius: 999px;
+            padding: 13px 20px;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+            font-weight: 800;
+            letter-spacing: -0.01em;
+        }
+
+        .button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 12px 24px rgba(37, 79, 105, 0.2);
+        }
+
+        .button:disabled {
+            opacity: 0.65;
+            cursor: wait;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .button-primary {
+            background: linear-gradient(135deg, var(--primary), var(--primary-deep));
+            color: #fff;
+            border-color: rgba(20, 43, 58, 0.35);
+        }
+
+        .button-accent {
+            background: linear-gradient(135deg, #79c2ae, #5ea794);
+            color: #12392f;
+            border-color: rgba(18, 57, 47, 0.38);
+        }
+
+        .button-soft {
+            background: rgba(255, 255, 255, 0.9);
+            color: var(--text);
+            border-color: rgba(43, 72, 101, 0.22);
+        }
+
+        .filter-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 18px 22px 0;
+        }
+
+        .filter-btn {
+            border: 1px solid transparent;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 10px 14px;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 700;
+            transition: all 0.2s ease;
+        }
+
+        .filter-btn:hover {
+            border-color: rgba(47, 108, 143, 0.2);
+            color: var(--primary-deep);
+            background: rgba(255, 255, 255, 0.96);
+        }
+
+        .filter-btn.active {
+            background: var(--primary-deep);
+            border-color: var(--primary-deep);
+            color: #fff;
+            box-shadow: 0 10px 20px rgba(37, 79, 105, 0.18);
+        }
+
+        .table-wrap {
+            padding: 18px 22px 22px;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 880px;
+        }
+
+        thead th {
+            padding: 14px 16px;
+            color: var(--muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            text-align: left;
+            border-bottom: 1px solid var(--line);
+        }
+
+        tbody tr {
+            transition: transform 0.18s ease, background 0.18s ease, opacity 0.18s ease;
+        }
+
+        tbody tr:hover {
+            background: rgba(255, 255, 255, 0.62);
+            transform: translateY(-1px);
+        }
+
+        tbody td {
+            padding: 16px;
+            border-bottom: 1px solid rgba(43, 72, 101, 0.08);
+            vertical-align: middle;
+        }
+
+        tbody tr.blocked {
+            opacity: 0.64;
+            background: rgba(248, 244, 236, 0.7);
+        }
+
+        .track-input {
+            width: 100%;
+            border: 1px solid transparent;
+            border-radius: 12px;
+            background: transparent;
+            padding: 10px 12px;
+            color: var(--text);
+            outline: none;
+            transition: border-color 0.2s ease, background 0.2s ease;
+        }
+
+        .track-input:focus {
+            border-color: rgba(47, 108, 143, 0.18);
+            background: rgba(255, 255, 255, 0.82);
+        }
+
+        .swap-btn {
+            border: 0;
+            width: 38px;
+            height: 38px;
+            border-radius: 999px;
+            background: rgba(47, 108, 143, 0.09);
+            color: var(--primary-deep);
+            cursor: pointer;
+            transition: transform 0.18s ease, background 0.18s ease;
+        }
+
+        .swap-btn:hover {
+            transform: rotate(180deg);
+            background: rgba(47, 108, 143, 0.16);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 7px 11px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .badge-ok {
+            background: var(--accent-soft);
+            color: #185544;
+        }
+
+        .badge-warning {
+            background: var(--warn-soft);
+            color: #8f5d13;
+        }
+
+        .badge-skip {
+            background: rgba(108, 123, 136, 0.14);
+            color: #52606a;
+        }
+
+        .badge-disk {
+            background: var(--danger-soft);
+            color: #8d3b30;
+        }
+
+        .info-cell {
+            max-width: 300px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .empty-state {
+            margin: 0 22px 22px;
+            padding: 26px;
+            border: 1px dashed rgba(43, 72, 101, 0.18);
+            border-radius: var(--radius-lg);
+            text-align: center;
+            color: var(--muted);
+            background: rgba(255, 255, 255, 0.45);
+        }
+
+        .status-card {
+            padding: 28px;
+            text-align: center;
+            margin-top: 18px;
+        }
+
+        .status-head {
+            max-width: 640px;
+            margin: 0 auto 24px;
+        }
+
+        .status-head h3 {
+            margin: 0 0 8px;
+            font-size: clamp(1.6rem, 4vw, 2.4rem);
+            letter-spacing: -0.04em;
+        }
+
+        .status-head p {
+            margin: 0;
+            color: var(--muted);
+        }
+
+        .progress-shell {
+            max-width: 720px;
+            margin: 0 auto;
+            display: grid;
+            gap: 18px;
+        }
+
+        .progress-card {
+            padding: 20px;
+            border-radius: var(--radius-lg);
+            background: var(--surface-strong);
+            border: 1px solid var(--line);
+            text-align: left;
+        }
+
+        .progress-meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 10px;
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        .progress-track {
+            width: 100%;
+            height: 12px;
+            border-radius: 999px;
+            overflow: hidden;
+            background: rgba(47, 108, 143, 0.1);
+        }
+
+        .progress-bar {
+            height: 100%;
+            border-radius: inherit;
+            transition: width 0.35s ease;
+        }
+
+        .progress-bar.total {
+            background: linear-gradient(90deg, var(--primary), #6a9eb8);
+        }
+
+        .progress-bar.current {
+            background: linear-gradient(90deg, var(--accent), #8fd2bf);
+        }
+
+        .checkmark-wrap {
+            width: 110px;
+            height: 110px;
+            margin: 0 auto 18px;
+            display: grid;
+            place-items: center;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(110, 185, 166, 0.22), transparent 66%);
         }
 
         .checkmark {
-            width: 56px;
-            height: 56px;
+            width: 60px;
+            height: 60px;
             border-radius: 50%;
             display: block;
             stroke-width: 2;
             stroke: #fff;
-            margin: 10% auto;
-            box-shadow: inset 0px 0px 0px #10b981;
+            box-shadow: inset 0 0 0 0 #6eb9a6;
             animation: fill .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both;
         }
 
@@ -29,7 +530,7 @@
             stroke-dashoffset: 166;
             stroke-width: 2;
             stroke-miterlimit: 10;
-            stroke: #10b981;
+            stroke: #6eb9a6;
             fill: none;
             animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
         }
@@ -39,6 +540,141 @@
             stroke-dasharray: 48;
             stroke-dashoffset: 48;
             animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        input[type="checkbox"] {
+            accent-color: var(--primary);
+            width: 18px;
+            height: 18px;
+        }
+
+        /* ── Analyzing spinner ── */
+        .spinner-overlay {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 18px;
+            padding: 48px 22px;
+        }
+
+        .spinner-overlay.visible {
+            display: flex;
+        }
+
+        .spinner-ring {
+            width: 52px;
+            height: 52px;
+            border: 4px solid rgba(47, 108, 143, 0.15);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        .spinner-text {
+            color: var(--muted);
+            font-size: 14px;
+            font-weight: 600;
+            animation: pulse-text 1.6s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes pulse-text {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.45; }
+        }
+
+        /* ── Downloading active pulse ── */
+        .status-card.downloading .progress-bar {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .status-card.downloading .progress-bar::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(
+                90deg,
+                transparent 0%,
+                rgba(255, 255, 255, 0.35) 50%,
+                transparent 100%
+            );
+            animation: shimmer 1.5s ease-in-out infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .status-card.downloading #currentTask {
+            animation: pulse-text 2s ease-in-out infinite;
+        }
+
+        /* ── Downloading bounce dots ── */
+        .bounce-dots {
+            display: inline-flex;
+            gap: 4px;
+            margin-left: 6px;
+        }
+
+        .bounce-dots span {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--primary);
+            animation: bounce-dot 1.2s ease-in-out infinite;
+        }
+
+        .bounce-dots span:nth-child(2) { animation-delay: 0.15s; }
+        .bounce-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+        @keyframes bounce-dot {
+            0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+            40% { transform: translateY(-8px); opacity: 1; }
+        }
+
+        /* ── Completion celebration ── */
+        .success-enter {
+            animation: success-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        }
+
+        @keyframes success-pop {
+            0% { opacity: 0; transform: scale(0.7) translateY(20px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        .confetti-canvas {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        #successAnimation {
+            position: relative;
+            z-index: 2;
+        }
+
+        /* ── Section transitions ── */
+        .fade-out {
+            animation: fade-out 0.35s ease forwards;
+        }
+
+        @keyframes fade-out {
+            to { opacity: 0; transform: translateY(-10px); }
+        }
+
+        .fade-in {
+            animation: fade-up 0.5s ease both;
         }
 
         @keyframes stroke {
@@ -55,156 +691,360 @@
             }
 
             50% {
-                transform: scale3d(1.1, 1.1, 1);
+                transform: scale3d(1.08, 1.08, 1);
             }
         }
 
         @keyframes fill {
             100% {
-                box-shadow: inset 0px 0px 0px 30px #10b981;
+                box-shadow: inset 0 0 0 30px #6eb9a6;
+            }
+        }
+
+        @keyframes fade-up {
+            from {
+                opacity: 0;
+                transform: translateY(18px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes float-in {
+            from {
+                opacity: 0;
+                transform: translateY(18px) scale(0.98);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        @media (max-width: 1024px) {
+            .hero-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hero-stats {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .stat-value {
+                font-size: 1.25rem;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .config-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hero,
+            .status-card {
+                padding: 22px;
+            }
+
+            .panel-head {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 14px;
+            }
+
+            .panel-head .button {
+                width: 100%;
+                text-align: center;
+            }
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 16px 10px 40px;
+            }
+
+            .hero {
+                padding: 18px;
+                border-radius: var(--radius-lg);
+            }
+
+            .hero h1 {
+                font-size: clamp(1.8rem, 7vw, 2.4rem);
+            }
+
+            .hero-stats {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+
+            .stat-card {
+                min-height: auto;
+                padding: 14px;
+                flex-direction: row;
+                justify-content: space-between;
+                text-align: left;
+            }
+
+            .stat-label {
+                margin-bottom: 0;
+            }
+
+            .stat-value {
+                font-size: 1.1rem;
+            }
+
+            .config-grid {
+                padding: 16px;
+                gap: 14px;
+            }
+
+            .field input {
+                padding: 12px 14px;
+            }
+
+            .actions {
+                padding: 0 16px 16px;
+            }
+
+            .actions .button {
+                width: 100%;
+                text-align: center;
+            }
+
+            .filter-row {
+                padding: 14px 16px 0;
+            }
+
+            .table-wrap {
+                padding: 14px 12px 16px;
+            }
+
+            table {
+                min-width: 640px;
+            }
+
+            .panel-head {
+                padding: 16px;
+            }
+
+            .status-card {
+                padding: 18px;
+            }
+
+            .progress-card {
+                padding: 16px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+
+            *,
+            *::before,
+            *::after {
+                animation: none !important;
+                transition: none !important;
+                scroll-behavior: auto !important;
             }
         }
     </style>
 </head>
 
-<body class="bg-slate-50 text-slate-800 min-h-screen py-10 px-4">
-
-    <div class="max-w-5xl mx-auto">
-        <div class="text-center mb-10">
-            <h1 class="text-3xl font-bold text-slate-900">AzuraCast <span class="text-indigo-600">Sync</span></h1>
-        </div>
-
-        <div id="configSection"
-            class="bg-white rounded-xl shadow-sm border border-slate-200 mb-8 overflow-hidden transition-all">
-            <div class="bg-slate-50 px-6 py-4 border-b border-slate-200">
-                <h2 class="font-semibold text-slate-700">Configuration</h2>
-            </div>
-            <div class="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div><label class="block text-sm font-medium text-slate-700">Station ID</label><input type="text"
-                        id="stationId" value="{{ config.STATION_ID }}"
-                        class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border p-2">
+<body>
+    <div class="page-shell">
+        <section class="hero">
+            <div class="hero-grid">
+                <div>
+                    <span class="hero-topline">Playlist Sync Console</span>
+                    <h1>AzuraCast downloader with a calmer, cleaner control surface.</h1>
+                    <p>Analyze a playlist, review matches, fix artist and title pairs, then stream downloads with live
+                        progress in one focused workspace.</p>
                 </div>
-                <div><label class="block text-sm font-medium text-slate-700">API Key</label><input type="password"
-                        id="apiKey" value="{{ config.API_KEY }}"
-                        class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border p-2">
+                <div class="hero-stats">
+                    <div class="stat-card">
+                        <span class="stat-label">Station Sync</span>
+                        <span class="stat-value">Metadata-aware</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Review Flow</span>
+                        <span class="stat-value">Filter + edit</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Output</span>
+                        <span class="stat-value">MP3 + tags</span>
+                    </div>
                 </div>
-                <div class="sm:col-span-2"><label class="block text-sm font-medium text-slate-700">Playlist
-                        URL</label><input type="text" id="playlistUrl" value="{{ config.PLAYLIST_URL }}"
-                        class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border p-2">
+            </div>
+        </section>
+
+        <section id="configSection" class="panel">
+            <div class="panel-head">
+                <div>
+                    <h2 class="panel-title">Connection Setup</h2>
+                    <div class="panel-subtitle">Enter AzuraCast credentials and the playlist to inspect.</div>
                 </div>
-                <div class="sm:col-span-2"><label class="block text-sm font-medium text-slate-700">Download
-                        Dir</label><input type="text" id="downloadDir" value="{{ config.DOWNLOAD_DIR }}"
-                        class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border p-2">
+            </div>
+            <div class="config-grid">
+                <div class="field">
+                    <label for="stationId">Station ID</label>
+                    <input type="text" id="stationId" value="{{ config.STATION_ID }}">
                 </div>
-                <div class="sm:col-span-2 text-right"><button id="btnAnalyze"
-                        class="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 transition">1. Analyze
-                        Playlist</button></div>
+                <div class="field">
+                    <label for="apiKey">API Key</label>
+                    <input type="password" id="apiKey" value="{{ config.API_KEY }}">
+                </div>
+                <div class="field full">
+                    <label for="playlistUrl">Playlist URL</label>
+                    <input type="text" id="playlistUrl" value="{{ config.PLAYLIST_URL }}">
+                </div>
+                <div class="field full">
+                    <label for="downloadDir">Download Dir</label>
+                    <input type="text" id="downloadDir" value="{{ config.DOWNLOAD_DIR }}">
+                </div>
             </div>
-        </div>
-
-        <div id="resultsSection"
-            class="hidden bg-white rounded-xl shadow-sm border border-slate-200 mb-8 overflow-hidden">
-            <div
-                class="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center flex-wrap gap-4">
-                <h3 class="font-semibold text-slate-700">Scan Results</h3>
-                <button id="btnDownload"
-                    class="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 transition">2. Download
-                    Selected</button>
+            <div class="actions">
+                <button id="btnAnalyze" class="button button-primary">1. Analyze Playlist</button>
             </div>
+            <div id="analyzeSpinner" class="spinner-overlay">
+                <div class="spinner-ring"></div>
+                <span class="spinner-text">Scanning playlist & matching tracks…</span>
+            </div>
+        </section>
 
-            <div class="bg-white px-6 py-3 border-b border-slate-100 flex gap-2 overflow-x-auto">
-                <button onclick="setFilter('all')"
-                    class="filter-btn active px-3 py-1 rounded-full text-xs font-medium border transition-colors bg-slate-800 text-white border-slate-800"
-                    data-filter="all">All</button>
-                <button onclick="setFilter('ok')"
-                    class="filter-btn px-3 py-1 rounded-full text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50"
-                    data-filter="ok">New</button>
-                <button onclick="setFilter('warning')"
-                    class="filter-btn px-3 py-1 rounded-full text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50"
-                    data-filter="warning">Warning</button>
-                <button onclick="setFilter('skip')"
-                    class="filter-btn px-3 py-1 rounded-full text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50"
-                    data-filter="skip">Exists</button>
-                <button onclick="setFilter('file_exists')"
-                    class="filter-btn px-3 py-1 rounded-full text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50"
-                    data-filter="file_exists">On Disk</button>
+        <section id="resultsSection" class="panel hidden">
+            <div class="panel-head">
+                <div>
+                    <h3 class="panel-title">Scan Results</h3>
+                    <div class="panel-subtitle">Select the tracks you want to download and adjust titles before
+                        starting.</div>
+                </div>
+                <button id="btnDownload" class="button button-accent">2. Download Selected</button>
             </div>
 
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-slate-200">
-                    <thead class="bg-slate-50 text-xs text-slate-500 uppercase">
+            <div class="filter-row">
+                <button onclick="setFilter('all')" class="filter-btn active" data-filter="all">All</button>
+                <button onclick="setFilter('ok')" class="filter-btn" data-filter="ok">New</button>
+                <button onclick="setFilter('warning')" class="filter-btn" data-filter="warning">Warning</button>
+                <button onclick="setFilter('skip')" class="filter-btn" data-filter="skip">Exists</button>
+                <button onclick="setFilter('file_exists')" class="filter-btn" data-filter="file_exists">On Disk</button>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
                         <tr>
-                            <th class="px-6 py-3 text-left w-10"><input type="checkbox" id="checkAll"></th>
-                            <th class="px-6 py-3 text-left w-24">Status</th>
-                            <th class="px-6 py-3 text-left">Artist</th>
-                            <th class="px-6 py-3 text-left w-10"></th>
-                            <th class="px-6 py-3 text-left">Title</th>
-                            <th class="px-6 py-3 text-left">Info</th>
+                            <th style="width: 42px;"><input type="checkbox" id="checkAll"></th>
+                            <th style="width: 128px;">Status</th>
+                            <th>Artist</th>
+                            <th style="width: 56px;"></th>
+                            <th>Title</th>
+                            <th style="width: 320px;">Info</th>
                         </tr>
                     </thead>
-                    <tbody id="tracksTable" class="divide-y divide-slate-200"></tbody>
+                    <tbody id="tracksTable"></tbody>
                 </table>
-                <div id="emptyState" class="hidden py-8 text-center text-slate-400 text-sm">
-                    No tracks match this filter.
-                </div>
+                <div id="emptyState" class="empty-state hidden">No tracks match this filter.</div>
             </div>
-        </div>
+        </section>
 
-        <div id="statusSection" class="hidden bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center">
+        <section id="statusSection" class="status-card hidden">
             <div id="activeDownload">
-                <h3 class="text-lg font-medium mb-6" id="currentTask">Preparing...</h3>
-                <div class="max-w-xl mx-auto space-y-6 text-left">
-                    <div>
-                        <div class="flex justify-between text-sm mb-1"><span>Total Queue</span><span
-                                id="totalText">0/0</span></div>
-                        <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
-                            <div id="totalProgressBar" class="bg-indigo-600 h-full transition-all" style="width:0%">
-                            </div>
+                <div class="status-head">
+                    <h3 id="currentTask">Preparing…<span class="bounce-dots"><span></span><span></span><span></span></span></h3>
+                    <p>Download progress updates stream here while each selected track is processed.</p>
+                </div>
+                <div class="progress-shell">
+                    <div class="progress-card">
+                        <div class="progress-meta">
+                            <span>Total Queue</span>
+                            <span id="totalText">0/0</span>
+                        </div>
+                        <div class="progress-track">
+                            <div id="totalProgressBar" class="progress-bar total" style="width: 0%;"></div>
                         </div>
                     </div>
-                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                        <div class="flex justify-between text-xs mb-1"><span id="currentPercentText">0%</span><span
-                                id="downloadSpeed">--</span></div>
-                        <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
-                            <div id="currentProgressBar" class="bg-emerald-500 h-full transition-all" style="width:0%">
-                            </div>
+                    <div class="progress-card">
+                        <div class="progress-meta">
+                            <span id="currentPercentText">0%</span>
+                            <span id="downloadSpeed">--</span>
+                        </div>
+                        <div class="progress-track">
+                            <div id="currentProgressBar" class="progress-bar current" style="width: 0%;"></div>
                         </div>
                     </div>
                 </div>
             </div>
+
             <div id="successAnimation" class="hidden">
-                <svg class="checkmark" viewBox="0 0 52 52">
-                    <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none" />
-                    <path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" />
-                </svg>
-                <h4 class="text-xl font-bold text-emerald-600 mt-4">Finished!</h4>
-                <button onclick="location.reload()"
-                    class="mt-6 text-slate-600 border px-4 py-2 rounded hover:bg-slate-50">Back</button>
+                <div class="checkmark-wrap">
+                    <svg class="checkmark" viewBox="0 0 52 52">
+                        <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none" />
+                        <path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" />
+                    </svg>
+                </div>
+                <h4 style="margin: 0; font-size: 2rem; letter-spacing: -0.04em;">Finished</h4>
+                <p style="color: var(--muted); margin: 10px 0 0;">All selected tracks have been processed.</p>
+                <button onclick="location.reload()" class="button button-soft" style="margin-top: 22px;">Back</button>
             </div>
-        </div>
+        </section>
     </div>
 
     <script>
         let analyzedTracks = [];
         let currentFilter = 'all';
 
+        function esc(str) {
+            const d = document.createElement('div');
+            d.textContent = str || '';
+            return d.innerHTML;
+        }
+
         document.getElementById('btnAnalyze').addEventListener('click', async () => {
             const btn = document.getElementById('btnAnalyze');
-            btn.disabled = true; btn.innerText = "Analyzing...";
-            const payload = { station_id: document.getElementById('stationId').value, api_key: document.getElementById('apiKey').value, playlist_url: document.getElementById('playlistUrl').value, download_dir: document.getElementById('downloadDir').value };
+            const spinner = document.getElementById('analyzeSpinner');
+            const configGrid = document.querySelector('.config-grid');
+            const actions = document.querySelector('.actions');
+
+            btn.disabled = true;
+            btn.innerText = "Analyzing…";
+            configGrid.style.display = 'none';
+            actions.style.display = 'none';
+            spinner.classList.add('visible');
+
+            const payload = {
+                station_id: document.getElementById('stationId').value,
+                api_key: document.getElementById('apiKey').value,
+                playlist_url: document.getElementById('playlistUrl').value,
+                download_dir: document.getElementById('downloadDir').value
+            };
+
             try {
-                const response = await fetch('/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
                 const data = await response.json();
                 analyzedTracks = data.tracks;
-
-                // Reset filter to All on new analysis
                 currentFilter = 'all';
                 updateFilterButtons();
-
                 renderTable();
-                document.getElementById('resultsSection').classList.remove('hidden');
-            } catch (e) { alert("Failed: " + e); }
-            finally { btn.disabled = false; btn.innerText = "1. Analyze Playlist"; }
+
+                const results = document.getElementById('resultsSection');
+                results.classList.remove('hidden');
+                results.classList.add('fade-in');
+                results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } catch (e) {
+                alert("Failed: " + e);
+            } finally {
+                spinner.classList.remove('visible');
+                configGrid.style.display = '';
+                actions.style.display = '';
+                btn.disabled = false;
+                btn.innerText = "1. Analyze Playlist";
+            }
         });
 
         function setFilter(filter) {
@@ -215,11 +1055,7 @@
 
         function updateFilterButtons() {
             document.querySelectorAll('.filter-btn').forEach(btn => {
-                if (btn.dataset.filter === currentFilter) {
-                    btn.className = "filter-btn active px-3 py-1 rounded-full text-xs font-medium border transition-colors bg-slate-800 text-white border-slate-800";
-                } else {
-                    btn.className = "filter-btn px-3 py-1 rounded-full text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50";
-                }
+                btn.classList.toggle('active', btn.dataset.filter === currentFilter);
             });
         }
 
@@ -227,50 +1063,42 @@
             const tbody = document.getElementById('tracksTable');
             tbody.innerHTML = '';
 
-            // Filter logic
-            const visibleTracks = analyzedTracks.filter(track => {
-                if (currentFilter === 'all') return true;
-                return track.status === currentFilter;
-            });
+            const visibleWithIndex = analyzedTracks
+                .map((track, i) => ({ track, i }))
+                .filter(({ track }) => currentFilter === 'all' || track.status === currentFilter);
 
-            if (visibleTracks.length === 0) {
+            if (visibleWithIndex.length === 0) {
                 document.getElementById('emptyState').classList.remove('hidden');
+                document.getElementById('checkAll').checked = false;
                 return;
-            } else {
-                document.getElementById('emptyState').classList.add('hidden');
             }
 
-            visibleTracks.forEach((track) => {
-                // Find original index to ensure editing works on the main array
-                const originalIndex = analyzedTracks.indexOf(track);
+            document.getElementById('emptyState').classList.add('hidden');
 
+            visibleWithIndex.forEach(({ track, i: originalIndex }) => {
                 const tr = document.createElement('tr');
                 const isBlocked = track.status === 'skip' || track.status === 'file_exists';
-                let badge = `<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">New</span>`;
-                if (track.status === 'skip') badge = `<span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-xs">Exists</span>`;
-                if (track.status === 'file_exists') badge = `<span class="bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full text-xs">On Disk</span>`;
-                if (track.status === 'warning') badge = `<span class="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-xs">Warning</span>`;
+                let badge = '<span class="badge badge-ok">New</span>';
 
-                tr.className = isBlocked ? "opacity-60 bg-slate-50" : "hover:bg-slate-50 transition";
+                if (track.status === 'skip') badge = '<span class="badge badge-skip">Exists</span>';
+                if (track.status === 'file_exists') badge = '<span class="badge badge-disk">On Disk</span>';
+                if (track.status === 'warning') badge = '<span class="badge badge-warning">Warning</span>';
+
+                tr.className = isBlocked ? 'blocked' : '';
                 tr.innerHTML = `
-                    <td class="px-6 py-4"><input type="checkbox" class="track-check" data-index="${originalIndex}" ${!isBlocked ? 'checked' : ''} ${isBlocked ? 'disabled' : ''}></td>
-                    <td class="px-6 py-4">${badge}</td>
-                    <td class="px-6 py-4"><input type="text" class="edit-artist bg-transparent w-full text-sm border-none focus:ring-0" value="${track.clean_artist}" data-index="${originalIndex}" ${isBlocked ? 'disabled' : ''}></td>
-                    <td class="px-1"><button onclick="swap(${originalIndex})" class="p-1 hover:bg-slate-200 rounded ${isBlocked ? 'hidden' : ''}" title="Swap Artist/Title">⇄</button></td>
-                    <td class="px-6 py-4"><input type="text" class="edit-title bg-transparent w-full text-sm border-none focus:ring-0" value="${track.title}" data-index="${originalIndex}" ${isBlocked ? 'disabled' : ''}></td>
-                    <td class="px-6 py-4 text-xs text-slate-400 max-w-xs truncate" title="${track.message}">${track.message}</td>
+                    <td><input type="checkbox" class="track-check" data-index="${originalIndex}" ${!isBlocked ? 'checked' : ''} ${isBlocked ? 'disabled' : ''}></td>
+                    <td>${badge}</td>
+                    <td><input type="text" class="track-input edit-artist" value="${esc(track.clean_artist)}" data-index="${originalIndex}" ${isBlocked ? 'disabled' : ''}></td>
+                    <td><button onclick="swap(${originalIndex})" class="swap-btn ${isBlocked ? 'hidden' : ''}" title="Swap Artist and Title">⇄</button></td>
+                    <td><input type="text" class="track-input edit-title" value="${esc(track.title)}" data-index="${originalIndex}" ${isBlocked ? 'disabled' : ''}></td>
+                    <td class="info-cell" title="${esc(track.message)}">${esc(track.message) || 'Ready to download.'}</td>
                 `;
                 tbody.appendChild(tr);
             });
 
-            // Re-sync "Check All" box state based on visible checkboxes
             const visibleCheckboxes = document.querySelectorAll('.track-check:not(:disabled)');
-            if (visibleCheckboxes.length > 0) {
-                const allChecked = Array.from(visibleCheckboxes).every(c => c.checked);
-                document.getElementById('checkAll').checked = allChecked;
-            } else {
-                document.getElementById('checkAll').checked = false;
-            }
+            document.getElementById('checkAll').checked = visibleCheckboxes.length > 0 &&
+                Array.from(visibleCheckboxes).every(c => c.checked);
         }
 
         window.swap = (index) => {
@@ -286,36 +1114,149 @@
         });
 
         document.getElementById('checkAll').addEventListener('change', (e) => {
-            // Only toggle currently visible checkboxes
             document.querySelectorAll('.track-check:not(:disabled)').forEach(cb => cb.checked = e.target.checked);
         });
 
         document.getElementById('btnDownload').addEventListener('click', async () => {
-            // Only select checked boxes that are currently in the DOM (respects filter)
-            const selected = Array.from(document.querySelectorAll('.track-check:checked')).map(cb => analyzedTracks[cb.dataset.index]);
+            const selected = Array.from(document.querySelectorAll('.track-check:checked'))
+                .map(cb => analyzedTracks[cb.dataset.index]);
+
             if (!selected.length) return alert("None selected");
 
-            document.getElementById('configSection').classList.add('hidden');
-            document.getElementById('resultsSection').classList.add('hidden');
-            document.getElementById('statusSection').classList.remove('hidden');
+            const configEl = document.getElementById('configSection');
+            const resultsEl = document.getElementById('resultsSection');
+            const statusEl = document.getElementById('statusSection');
 
-            const total = selected.length; let done = 0;
-            const response = await fetch('/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tracks: selected, download_dir: document.getElementById('downloadDir').value }) });
-            const reader = response.body.getReader(); const decoder = new TextDecoder();
+            configEl.classList.add('fade-out');
+            resultsEl.classList.add('fade-out');
 
-            while (true) {
-                const { value, done: finished } = await reader.read(); if (finished) break;
-                const lines = decoder.decode(value).split("\n");
-                lines.forEach(line => {
-                    if (line.includes("Processing:")) document.getElementById('currentTask').innerText = line.replace("Processing:", "");
-                    if (line.includes("SUCCESS:")) { done++; document.getElementById('totalProgressBar').style.width = (done / total * 100) + '%'; document.getElementById('totalText').innerText = `${done}/${total}`; }
-                    const m = line.match(/(\d+\.\d+)%\s+of\s+.*?\s+at\s+(.*?)\s+ETA\s+(.*)/);
-                    if (m) { document.getElementById('currentProgressBar').style.width = m[1] + '%'; document.getElementById('currentPercentText').innerText = m[1] + '%'; document.getElementById('downloadSpeed').innerText = m[2]; }
+            await new Promise(r => setTimeout(r, 350));
+            configEl.classList.add('hidden');
+            resultsEl.classList.add('hidden');
+            configEl.classList.remove('fade-out');
+            resultsEl.classList.remove('fade-out');
+
+            statusEl.classList.remove('hidden');
+            statusEl.classList.add('fade-in', 'downloading');
+            statusEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+            const total = selected.length;
+            let done = 0;
+
+            try {
+                const response = await fetch('/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tracks: selected,
+                        download_dir: document.getElementById('downloadDir').value
+                    })
                 });
+
+                if (!response.ok) {
+                    alert(`Download failed: ${response.status}`);
+                    location.reload();
+                    return;
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { value, done: finished } = await reader.read();
+                    if (finished) break;
+
+                    const lines = decoder.decode(value).split("\n");
+                    lines.forEach(line => {
+                        if (line.includes("Processing:")) {
+                            const taskEl = document.getElementById('currentTask');
+                            taskEl.innerHTML = esc(line.replace("Processing:", "").trim()) +
+                                '<span class="bounce-dots"><span></span><span></span><span></span></span>';
+                        }
+                        if (line.includes("SUCCESS:")) {
+                            done++;
+                            document.getElementById('totalProgressBar').style.width = (done / total * 100) + '%';
+                            document.getElementById('totalText').innerText = `${done}/${total}`;
+                            // Reset current bar for next track
+                            document.getElementById('currentProgressBar').style.width = '0%';
+                            document.getElementById('currentPercentText').innerText = '0%';
+                            document.getElementById('downloadSpeed').innerText = '--';
+                        }
+
+                        const match = line.match(/(\d+\.\d+)%\s+of\s+.*?\s+at\s+(.*?)\s+ETA\s+(.*)/);
+                        if (match) {
+                            document.getElementById('currentProgressBar').style.width = match[1] + '%';
+                            document.getElementById('currentPercentText').innerText = match[1] + '%';
+                            document.getElementById('downloadSpeed').innerText = match[2];
+                        }
+                    });
+                }
+
+                // ── Completion animation ──
+                statusEl.classList.remove('downloading');
+                document.getElementById('activeDownload').classList.add('hidden');
+
+                const successEl = document.getElementById('successAnimation');
+                successEl.classList.remove('hidden');
+                successEl.classList.add('success-enter');
+
+                // Mini confetti burst
+                launchConfetti(statusEl);
+            } catch (e) {
+                alert("Download error: " + e);
+                location.reload();
             }
-            document.getElementById('activeDownload').classList.add('hidden');
-            document.getElementById('successAnimation').classList.remove('hidden');
         });
+
+        // Lightweight confetti effect
+        function launchConfetti(container) {
+            const canvas = document.createElement('canvas');
+            canvas.className = 'confetti-canvas';
+            canvas.width = container.offsetWidth;
+            canvas.height = container.offsetHeight;
+            container.style.position = 'relative';
+            container.appendChild(canvas);
+
+            const ctx = canvas.getContext('2d');
+            const colors = ['#6eb9a6', '#2f6c8f', '#f0b35a', '#d4705f', '#254f69', '#daf1ea'];
+            const pieces = Array.from({ length: 60 }, () => ({
+                x: canvas.width / 2,
+                y: canvas.height / 2,
+                vx: (Math.random() - 0.5) * 12,
+                vy: (Math.random() - 0.5) * 12 - 4,
+                size: Math.random() * 6 + 3,
+                color: colors[Math.floor(Math.random() * colors.length)],
+                rotation: Math.random() * 360,
+                rotSpeed: (Math.random() - 0.5) * 10,
+                opacity: 1
+            }));
+
+            let frame = 0;
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                let alive = false;
+                pieces.forEach(p => {
+                    if (p.opacity <= 0) return;
+                    alive = true;
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += 0.25;
+                    p.rotation += p.rotSpeed;
+                    p.opacity -= 0.012;
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate(p.rotation * Math.PI / 180);
+                    ctx.globalAlpha = Math.max(0, p.opacity);
+                    ctx.fillStyle = p.color;
+                    ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+                    ctx.restore();
+                });
+                frame++;
+                if (alive && frame < 120) requestAnimationFrame(draw);
+                else canvas.remove();
+            }
+            requestAnimationFrame(draw);
+        }
     </script>
 </body>
 
