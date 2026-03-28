@@ -953,7 +953,7 @@
             <div id="activeDownload">
                 <div class="status-head">
                     <h3 id="currentTask">Preparing…<span class="bounce-dots"><span></span><span></span><span></span></span></h3>
-                    <p>Download progress updates stream here while each selected track is processed.</p>
+                    <p>Background download progress updates appear here while each selected track is processed.</p>
                 </div>
                 <div class="progress-shell">
                     <div class="progress-card">
@@ -994,6 +994,55 @@
     <script>
         let analyzedTracks = [];
         let currentFilter = 'all';
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        function showDownloadError(message) {
+            document.getElementById('currentTask').textContent = message;
+            document.getElementById('downloadSpeed').innerText = '--';
+            document.getElementById('statusSection').classList.remove('downloading');
+        }
+
+        function updateDownloadStatus(data) {
+            const total = data.total || 0;
+            const completed = data.completed || 0;
+            const totalPercent = total > 0 ? (completed / total) * 100 : 0;
+            const currentPercent = Number(data.progress || 0);
+            document.getElementById('currentTask').innerHTML = esc(data.current_track || 'Queued') +
+                (data.status === 'finished'
+                    ? ''
+                    : '<span class="bounce-dots"><span></span><span></span><span></span></span>');
+            document.getElementById('totalProgressBar').style.width = `${totalPercent}%`;
+            document.getElementById('totalText').innerText = `${completed}/${total}`;
+            document.getElementById('currentProgressBar').style.width = `${currentPercent}%`;
+            document.getElementById('currentPercentText').innerText = `${Math.round(currentPercent)}%`;
+            document.getElementById('downloadSpeed').innerText = data.download_speed || '--';
+        }
+
+        async function pollDownloadJob(jobId) {
+            while (true) {
+                const response = await fetch(`/download/${jobId}`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || `Unable to fetch job status (${response.status})`);
+                }
+
+                updateDownloadStatus(data);
+
+                if (data.status === 'finished') {
+                    return data;
+                }
+
+                if (data.status === 'failed') {
+                    throw new Error(data.error || 'Download job failed');
+                }
+
+                await sleep(1000);
+            }
+        }
 
         function esc(str) {
             const d = document.createElement('div');
@@ -1141,7 +1190,11 @@
             statusEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
             const total = selected.length;
-            let done = 0;
+            document.getElementById('totalText').innerText = `0/${total}`;
+            document.getElementById('totalProgressBar').style.width = '0%';
+            document.getElementById('currentProgressBar').style.width = '0%';
+            document.getElementById('currentPercentText').innerText = '0%';
+            document.getElementById('downloadSpeed').innerText = '--';
 
             try {
                 const response = await fetch('/download', {
@@ -1153,44 +1206,22 @@
                     })
                 });
 
+                const data = await response.json();
+
                 if (!response.ok) {
-                    alert(`Download failed: ${response.status}`);
-                    location.reload();
-                    return;
+                    throw new Error(data.error || `Download failed: ${response.status}`);
                 }
 
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
+                updateDownloadStatus({
+                    current_track: 'Queued',
+                    total,
+                    completed: 0,
+                    progress: 0,
+                    download_speed: '--',
+                    status: data.status
+                });
 
-                while (true) {
-                    const { value, done: finished } = await reader.read();
-                    if (finished) break;
-
-                    const lines = decoder.decode(value).split("\n");
-                    lines.forEach(line => {
-                        if (line.includes("Processing:")) {
-                            const taskEl = document.getElementById('currentTask');
-                            taskEl.innerHTML = esc(line.replace("Processing:", "").trim()) +
-                                '<span class="bounce-dots"><span></span><span></span><span></span></span>';
-                        }
-                        if (line.includes("SUCCESS:")) {
-                            done++;
-                            document.getElementById('totalProgressBar').style.width = (done / total * 100) + '%';
-                            document.getElementById('totalText').innerText = `${done}/${total}`;
-                            // Reset current bar for next track
-                            document.getElementById('currentProgressBar').style.width = '0%';
-                            document.getElementById('currentPercentText').innerText = '0%';
-                            document.getElementById('downloadSpeed').innerText = '--';
-                        }
-
-                        const match = line.match(/(\d+\.\d+)%\s+of\s+.*?\s+at\s+(.*?)\s+ETA\s+(.*)/);
-                        if (match) {
-                            document.getElementById('currentProgressBar').style.width = match[1] + '%';
-                            document.getElementById('currentPercentText').innerText = match[1] + '%';
-                            document.getElementById('downloadSpeed').innerText = match[2];
-                        }
-                    });
-                }
+                await pollDownloadJob(data.job_id);
 
                 // ── Completion animation ──
                 statusEl.classList.remove('downloading');
@@ -1203,8 +1234,10 @@
                 // Mini confetti burst
                 launchConfetti(statusEl);
             } catch (e) {
+                showDownloadError(e.message || String(e));
                 alert("Download error: " + e);
-                location.reload();
+                await sleep(1200);
+                    location.reload();
             }
         });
 
