@@ -5,7 +5,7 @@ import subprocess
 import uuid
 from pathlib import Path
 from threading import Lock, Thread
-from typing import Any
+from typing import Any, Optional, Tuple
 
 import requests
 from dotenv import load_dotenv
@@ -105,7 +105,7 @@ class AnalyzeRequest(BaseModel):
 
 
 class TrackPayload(BaseModel):
-    id: str | None = None
+    id: Optional[str] = None
     url: str = Field(min_length=1)
     clean_artist: str = Field(min_length=1)
     title: str = Field(min_length=1)
@@ -158,6 +158,14 @@ def clean_for_ffmpeg(text: str) -> str:
     return text.replace('"', "'").replace("\\", "")
 
 
+def clean_for_filename(text: str) -> str:
+    if not text:
+        return ""
+    cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", text)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned.rstrip(" .")
+
+
 def clean_junk(text: str) -> str:
     if not text:
         return ""
@@ -169,6 +177,23 @@ def clean_junk(text: str) -> str:
     text = re.sub(r"#\S+", "", text)
     text = re.sub(r"(?i)\s+(official|video|audio|lyric|lyrics|music|clean)+$", "", text)
     return text.strip()
+
+
+def normalize_track_source_url(track: dict[str, Any]) -> str:
+    webpage_url = str(track.get("webpage_url") or "").strip()
+    if webpage_url:
+        return webpage_url
+
+    url = str(track.get("url") or "").strip()
+    if not url:
+        return ""
+    if re.match(r"^https?://", url, flags=re.IGNORECASE):
+        return url
+
+    extractor = normalize(str(track.get("extractor_key") or track.get("ie_key") or ""))
+    if extractor == "youtube":
+        return f"https://www.youtube.com/watch?v={url}"
+    return url
 
 
 def smart_parse(raw_title: str, raw_uploader: str):
@@ -262,7 +287,7 @@ class InMemoryJobStore:
             self.jobs[job_id] = job_data
         return job_data
 
-    def get(self, job_id: str) -> dict[str, Any] | None:
+    def get(self, job_id: str) -> Optional[dict[str, Any]]:
         with self.lock:
             job_data = self.jobs.get(job_id)
             return dict(job_data) if job_data else None
@@ -312,8 +337,8 @@ def get_download_directory(download_dir: str) -> Path:
 def build_download_command(track: dict[str, Any]) -> list[str]:
     artist = track.get("clean_artist", "Unknown Artist")
     title = track.get("title", "Unknown Title")
-    safe_artist = clean_for_ffmpeg(artist)
-    safe_title = clean_for_ffmpeg(title)
+    safe_artist = clean_for_filename(clean_for_ffmpeg(artist))
+    safe_title = clean_for_filename(clean_for_ffmpeg(title))
     return [
         "yt-dlp",
         "--newline",
@@ -336,11 +361,59 @@ def build_download_command(track: dict[str, Any]) -> list[str]:
     ]
 
 
-def parse_progress_line(line: str) -> tuple[str | None, str | None]:
+def build_download_attempts(track: dict[str, Any]) -> list[list[str]]:
+    base_command = build_download_command(track)
+    fallback_command = [
+        arg
+        for arg in base_command
+        if arg not in {"--extractor-args", "youtube:player_client=android"}
+    ]
+    if fallback_command == base_command:
+        return [base_command]
+    return [base_command, fallback_command]
+
+
+def parse_progress_line(line: str) -> Tuple[Optional[str], Optional[str]]:
     match = re.search(r"(\d+\.\d+)%\s+of\s+.*?\s+at\s+(.*?)\s+ETA\s+(.*)", line)
     if not match:
         return None, None
     return match.group(1), match.group(2)
+
+
+def summarize_command_output(lines: list[str], tail_length: int = 5) -> str:
+    tail_lines = [line for line in lines if line][-tail_length:]
+    if not tail_lines:
+        return "No yt-dlp output captured."
+    return " | ".join(tail_lines)
+
+
+def run_download_attempt(
+    job_id: str,
+    command: list[str],
+    download_dir: Path,
+) -> tuple[bool, list[str]]:
+    proc = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        cwd=download_dir,
+    )
+
+    output_lines: list[str] = []
+    if proc.stdout is not None:
+        for raw_line in proc.stdout:
+            line = raw_line.strip()
+            if not line:
+                continue
+            output_lines.append(line)
+            percent, speed = parse_progress_line(line)
+            if percent is not None:
+                persist_job_update(job_id, progress=float(percent), download_speed=speed or "--")
+            persist_job_log(job_id, line)
+
+    proc.wait()
+    return proc.returncode == 0, output_lines
 
 
 def run_download_job(job_id: str, tracks: list[dict[str, Any]], download_dir: str) -> dict[str, Any]:
@@ -349,6 +422,7 @@ def run_download_job(job_id: str, tracks: list[dict[str, Any]], download_dir: st
     abs_download_dir = get_download_directory(download_dir)
     total = len(tracks)
     completed = 0
+    failed_tracks: list[str] = []
 
     for track in tracks:
         artist = track.get("clean_artist", "Unknown Artist")
@@ -359,31 +433,27 @@ def run_download_job(job_id: str, tracks: list[dict[str, Any]], download_dir: st
         logger.info("Processing track {} for job {}", current_label, job_id)
 
         try:
-            proc = subprocess.Popen(
-                build_download_command(track),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                cwd=abs_download_dir,
-            )
+            attempt_output: list[str] = []
+            attempt_succeeded = False
+            attempts = build_download_attempts(track)
+            for attempt_index, command in enumerate(attempts, start=1):
+                persist_job_log(job_id, f"Attempt {attempt_index} for {current_label}")
+                attempt_succeeded, attempt_output = run_download_attempt(job_id, command, abs_download_dir)
+                if attempt_succeeded:
+                    break
+                if attempt_index < len(attempts):
+                    persist_job_log(
+                        job_id,
+                        f"Retrying {current_label} with a more generic yt-dlp configuration.",
+                    )
 
-            if proc.stdout is not None:
-                for raw_line in proc.stdout:
-                    line = raw_line.strip()
-                    if not line:
-                        continue
-                    percent, speed = parse_progress_line(line)
-                    if percent is not None:
-                        persist_job_update(job_id, progress=float(percent), download_speed=speed or "--")
-                    persist_job_log(job_id, line)
-
-            proc.wait()
-            if proc.returncode != 0:
-                message = f"ERROR: Failed to download {current_label}"
-                logger.error(message)
+            if not attempt_succeeded:
+                detail = summarize_command_output(attempt_output)
+                message = f"WARNING: Failed to download {current_label}: {detail}"
+                logger.warning(message)
                 persist_job_log(job_id, message)
-                persist_job_update(job_id, status="failed", error=message)
-                return {"status": "failed", "error": message}
+                failed_tracks.append(current_label)
+                continue
         except Exception as exc:
             message = f"ERROR: Failed to start download for {current_label}: {exc}"
             logger.exception(message)
@@ -394,6 +464,22 @@ def run_download_job(job_id: str, tracks: list[dict[str, Any]], download_dir: st
         completed += 1
         persist_job_update(job_id, completed=completed, progress=0, download_speed="--")
         persist_job_log(job_id, f"SUCCESS: {current_label}")
+
+    if failed_tracks:
+        error = f"Completed with {len(failed_tracks)} failed track(s): {', '.join(failed_tracks)}"
+        result = {"status": "finished_with_errors", "completed": completed, "failed": failed_tracks}
+        persist_job_update(
+            job_id,
+            status="finished_with_errors",
+            result=result,
+            current_track="Completed with warnings",
+            progress=100,
+            error=error,
+            download_speed="--",
+        )
+        persist_job_log(job_id, error)
+        logger.warning("Finished download job {} with {} failed track(s)", job_id, len(failed_tracks))
+        return result
 
     result = {"status": "finished", "completed": total}
     persist_job_update(job_id, status="finished", result=result, current_track="Completed", progress=100)
@@ -421,7 +507,7 @@ def enqueue_download_job(tracks: list[dict[str, Any]], download_dir: str) -> dic
     return job_store.get(job_data["id"]) or job_data
 
 
-def get_rq_job_status_payload(job_id: str) -> dict[str, Any] | None:
+def get_rq_job_status_payload(job_id: str) -> Optional[dict[str, Any]]:
     try:
         redis_connection = Redis.from_url(settings.redis_url)
         rq_job = Job.fetch(job_id, connection=redis_connection)
@@ -437,8 +523,8 @@ def get_rq_job_status_payload(job_id: str) -> dict[str, Any] | None:
         "deferred": "queued",
         "scheduled": "queued",
     }
-    status = status_map.get(rq_status, rq_status)
     meta = rq_job.meta or {}
+    status = meta.get("status") or status_map.get(rq_status, rq_status)
     return {
         "job_id": job_id,
         "status": status,
@@ -452,7 +538,7 @@ def get_rq_job_status_payload(job_id: str) -> dict[str, Any] | None:
     }
 
 
-def get_job_status_payload(job_id: str) -> dict[str, Any] | None:
+def get_job_status_payload(job_id: str) -> Optional[dict[str, Any]]:
     if settings.job_backend == "rq":
         return get_rq_job_status_payload(job_id)
 
@@ -545,7 +631,7 @@ def analyze():
 
         norm_title = normalize(final_title)
         norm_artist = normalize(final_artist)
-        predicted_filename = normalize(f"{clean_for_ffmpeg(final_artist)} - {clean_for_ffmpeg(final_title)}")
+        predicted_filename = normalize(f"{clean_for_filename(final_artist)} - {clean_for_filename(final_title)}")
 
         status = "ok"
         message = ""
@@ -570,7 +656,7 @@ def analyze():
         results.append(
             {
                 "id": track.get("id"),
-                "url": track.get("url"),
+                "url": normalize_track_source_url(track),
                 "original_artist": raw_artist,
                 "clean_artist": final_artist,
                 "title": final_title,

@@ -375,6 +375,45 @@
             background: rgba(255, 255, 255, 0.82);
         }
 
+        .info-stack {
+            display: grid;
+            gap: 10px;
+        }
+
+        .info-copy {
+            color: var(--muted);
+            line-height: 1.45;
+        }
+
+        .source-editor {
+            display: grid;
+            gap: 6px;
+        }
+
+        .source-label {
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .source-input {
+            width: 100%;
+            border: 1px solid rgba(43, 72, 101, 0.12);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.76);
+            padding: 10px 12px;
+            color: var(--text);
+            outline: none;
+            transition: border-color 0.2s ease, background 0.2s ease;
+        }
+
+        .source-input:focus {
+            border-color: rgba(47, 108, 143, 0.28);
+            background: rgba(255, 255, 255, 0.96);
+        }
+
         .swap-btn {
             border: 0;
             width: 38px;
@@ -917,8 +956,8 @@
             <div class="panel-head">
                 <div>
                     <h3 class="panel-title">Scan Results</h3>
-                    <div class="panel-subtitle">Select the tracks you want to download and adjust titles before
-                        starting.</div>
+                    <div class="panel-subtitle">Select tracks, adjust metadata, and paste a replacement source link if
+                        one item needs a different video.</div>
                 </div>
                 <button id="btnDownload" class="button button-accent">2. Download Selected</button>
             </div>
@@ -1011,7 +1050,7 @@
             const totalPercent = total > 0 ? (completed / total) * 100 : 0;
             const currentPercent = Number(data.progress || 0);
             document.getElementById('currentTask').innerHTML = esc(data.current_track || 'Queued') +
-                (data.status === 'finished'
+                (data.status === 'finished' || data.status === 'finished_with_errors'
                     ? ''
                     : '<span class="bounce-dots"><span></span><span></span><span></span></span>');
             document.getElementById('totalProgressBar').style.width = `${totalPercent}%`;
@@ -1032,7 +1071,7 @@
 
                 updateDownloadStatus(data);
 
-                if (data.status === 'finished') {
+                if (data.status === 'finished' || data.status === 'finished_with_errors') {
                     return data;
                 }
 
@@ -1132,6 +1171,16 @@
                 if (track.status === 'skip') badge = '<span class="badge badge-skip">Exists</span>';
                 if (track.status === 'file_exists') badge = '<span class="badge badge-disk">On Disk</span>';
                 if (track.status === 'warning') badge = '<span class="badge badge-warning">Warning</span>';
+                const infoCopy = esc(track.message) || 'Ready to download.';
+                const sourceEditor = isBlocked
+                    ? `<div class="info-copy">${infoCopy}</div>`
+                    : `<div class="info-stack">
+                            <div class="info-copy">${infoCopy}</div>
+                            <label class="source-editor">
+                                <span class="source-label">Source Link</span>
+                                <input type="text" class="source-input edit-url" value="${esc(track.url)}" data-index="${originalIndex}" placeholder="Paste a replacement YouTube or YouTube Music link">
+                            </label>
+                       </div>`;
 
                 tr.className = isBlocked ? 'blocked' : '';
                 tr.innerHTML = `
@@ -1140,7 +1189,7 @@
                     <td><input type="text" class="track-input edit-artist" value="${esc(track.clean_artist)}" data-index="${originalIndex}" ${isBlocked ? 'disabled' : ''}></td>
                     <td><button onclick="swap(${originalIndex})" class="swap-btn ${isBlocked ? 'hidden' : ''}" title="Swap Artist and Title">⇄</button></td>
                     <td><input type="text" class="track-input edit-title" value="${esc(track.title)}" data-index="${originalIndex}" ${isBlocked ? 'disabled' : ''}></td>
-                    <td class="info-cell" title="${esc(track.message)}">${esc(track.message) || 'Ready to download.'}</td>
+                    <td class="info-cell" title="${esc(track.message)}">${sourceEditor}</td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -1160,6 +1209,7 @@
         document.getElementById('tracksTable').addEventListener('input', (e) => {
             if (e.target.classList.contains('edit-artist')) analyzedTracks[e.target.dataset.index].clean_artist = e.target.value;
             if (e.target.classList.contains('edit-title')) analyzedTracks[e.target.dataset.index].title = e.target.value;
+            if (e.target.classList.contains('edit-url')) analyzedTracks[e.target.dataset.index].url = e.target.value;
         });
 
         document.getElementById('checkAll').addEventListener('change', (e) => {
@@ -1171,6 +1221,9 @@
                 .map(cb => analyzedTracks[cb.dataset.index]);
 
             if (!selected.length) return alert("None selected");
+            if (selected.some(track => !(track.url || '').trim())) {
+                return alert("One or more selected tracks are missing a source link.");
+            }
 
             const configEl = document.getElementById('configSection');
             const resultsEl = document.getElementById('resultsSection');
@@ -1228,11 +1281,24 @@
                 document.getElementById('activeDownload').classList.add('hidden');
 
                 const successEl = document.getElementById('successAnimation');
+                const successTitle = successEl.querySelector('h4');
+                const successMessage = successEl.querySelector('p');
+
+                if (data.status === 'finished_with_errors') {
+                    successTitle.textContent = 'Finished with warnings';
+                    successMessage.textContent = 'Most tracks were processed, but a few failed. Check the job logs for details.';
+                } else {
+                    successTitle.textContent = 'Finished';
+                    successMessage.textContent = 'All selected tracks have been processed.';
+                }
+
                 successEl.classList.remove('hidden');
                 successEl.classList.add('success-enter');
 
                 // Mini confetti burst
-                launchConfetti(statusEl);
+                if (data.status === 'finished') {
+                    launchConfetti(statusEl);
+                }
             } catch (e) {
                 showDownloadError(e.message || String(e));
                 alert("Download error: " + e);
