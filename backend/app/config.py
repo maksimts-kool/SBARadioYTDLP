@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     max_active_jobs: int = 1
     cleanup_after_seconds: int = 60 * 60
     cleanup_interval_seconds: int = 10 * 60
+    ytdlp_cookie_file: str = ""
+    ytdlp_cookies_from_browser: str = ""
 
     @property
     def allowed_origin_list(self) -> list[str]:
@@ -26,6 +28,16 @@ class Settings(BaseSettings):
     def allowed_origin_regex_pattern(self) -> str | None:
         pattern = self.allowed_origin_regex.strip()
         return pattern or None
+
+    @property
+    def ytdlp_cookie_file_path(self) -> str | None:
+        path = self.ytdlp_cookie_file.strip()
+        return path or None
+
+    @property
+    def ytdlp_browser_cookie_spec(self) -> str | None:
+        spec = self.ytdlp_cookies_from_browser.strip()
+        return spec or None
 
 
 def normalize_origin(origin: str) -> str:

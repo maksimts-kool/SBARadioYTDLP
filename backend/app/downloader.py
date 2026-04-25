@@ -20,16 +20,11 @@ class DownloadCancelled(Exception):
 
 
 def extract_preview(url: str, settings: Settings) -> PreviewResponse:
-    opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "extract_flat": "in_playlist",
-        "skip_download": True,
-    }
     try:
+        opts = metadata_options(settings)
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
-    except yt_dlp.utils.DownloadError as exc:
+    except (ValueError, yt_dlp.utils.DownloadError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=clean_error(str(exc))) from exc
 
     if not info:
@@ -108,7 +103,15 @@ def run_download_job(job: Job, manager: JobManager, settings: Settings) -> None:
                 completed_items=position - 1,
                 message=f"Downloading {position} of {len(targets)}",
             )
-            new_files = download_one(job, manager, target["url"], download_dir, position, len(targets))
+            new_files = download_one(
+                job,
+                manager,
+                settings,
+                target["url"],
+                download_dir,
+                position,
+                len(targets),
+            )
             downloaded_files.extend(new_files)
             manager.update(job, completed_items=position, progress=(position / len(targets)) * 100)
 
@@ -133,7 +136,7 @@ def run_download_job(job: Job, manager: JobManager, settings: Settings) -> None:
 
 
 def resolve_targets(job: Job, settings: Settings) -> List[Dict[str, str]]:
-    info = extract_flat(job.url)
+    info = extract_flat(job.url, settings)
     raw_entries = [entry for entry in info.get("entries") or [] if entry]
     entries = [entry for entry in raw_entries if entry_video_url(entry)]
     if raw_entries and not entries:
@@ -176,21 +179,35 @@ def resolve_targets(job: Job, settings: Settings) -> List[Dict[str, str]]:
     return targets
 
 
-def extract_flat(url: str) -> Dict[str, Any]:
+def extract_flat(url: str, settings: Settings) -> Dict[str, Any]:
+    opts = metadata_options(settings)
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+    return info or {}
+
+
+def metadata_options(settings: Settings) -> Dict[str, Any]:
     opts = {
         "quiet": True,
         "no_warnings": True,
         "extract_flat": "in_playlist",
         "skip_download": True,
     }
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-    return info or {}
+    opts.update(ytdlp_auth_options(settings))
+    return opts
 
 
-def download_one(job: Job, manager: JobManager, url: str, download_dir: Path, position: int, total: int) -> List[Path]:
+def download_one(
+    job: Job,
+    manager: JobManager,
+    settings: Settings,
+    url: str,
+    download_dir: Path,
+    position: int,
+    total: int,
+) -> List[Path]:
     before = set(download_dir.glob("*"))
-    opts = ytdlp_options(job, download_dir)
+    opts = ytdlp_options(job, download_dir, settings)
 
     def progress_hook(data: Dict[str, Any]) -> None:
         check_cancelled(job)
@@ -225,7 +242,7 @@ def download_one(job: Job, manager: JobManager, url: str, download_dir: Path, po
     return sorted(created, key=lambda path: path.stat().st_mtime)
 
 
-def ytdlp_options(job: Job, download_dir: Path) -> Dict[str, Any]:
+def ytdlp_options(job: Job, download_dir: Path, settings: Settings) -> Dict[str, Any]:
     outtmpl = str(download_dir / "%(title).180B [%(id)s].%(ext)s")
     base: Dict[str, Any] = {
         "outtmpl": outtmpl,
@@ -236,6 +253,7 @@ def ytdlp_options(job: Job, download_dir: Path) -> Dict[str, Any]:
         "windowsfilenames": True,
         "continuedl": True,
     }
+    base.update(ytdlp_auth_options(settings))
 
     if job.kind.value == "mp3":
         preferred_quality = "320" if job.quality == "best" else job.quality.rstrip("k")
@@ -260,6 +278,50 @@ def ytdlp_options(job: Job, download_dir: Path) -> Dict[str, Any]:
         fmt = f"bv*[height<={height}]+ba/b[height<={height}]/b"
     base.update({"format": fmt, "merge_output_format": "mp4"})
     return base
+
+
+def ytdlp_auth_options(settings: Settings) -> Dict[str, Any]:
+    opts: Dict[str, Any] = {}
+    if settings.ytdlp_cookie_file_path:
+        opts["cookiefile"] = settings.ytdlp_cookie_file_path
+    if settings.ytdlp_browser_cookie_spec:
+        opts["cookiesfrombrowser"] = parse_cookies_from_browser(settings.ytdlp_browser_cookie_spec)
+    return opts
+
+
+def parse_cookies_from_browser(
+    value: str,
+) -> tuple[str, Optional[str], Optional[str], Optional[str]]:
+    match = re.fullmatch(
+        r"""(?x)
+        (?P<name>[^+:]+)
+        (?:\s*\+\s*(?P<keyring>[^:]+))?
+        (?:\s*:\s*(?!:)(?P<profile>.+?))?
+        (?:\s*::\s*(?P<container>.+))?
+        """,
+        value.strip(),
+    )
+    if match is None:
+        raise ValueError(
+            "APP_YTDLP_COOKIES_FROM_BROWSER must look like "
+            "BROWSER[+KEYRING][:PROFILE][::CONTAINER], for example firefox or chrome:Default."
+        )
+
+    browser_name = match.group("name").strip().lower()
+    if not browser_name:
+        raise ValueError("APP_YTDLP_COOKIES_FROM_BROWSER must include a browser name.")
+
+    profile = clean_optional_match(match.group("profile"))
+    keyring = clean_optional_match(match.group("keyring"))
+    container = clean_optional_match(match.group("container"))
+    return browser_name, profile, keyring.upper() if keyring else None, container
+
+
+def clean_optional_match(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned or None
 
 
 def stable_media_files(files: Iterable[Path], download_dir: Path) -> List[Path]:
@@ -388,4 +450,10 @@ def check_cancelled(job: Job) -> None:
 def clean_error(message: str) -> str:
     text = re.sub(r"\x1b\[[0-9;]*m", "", message)
     text = text.replace("ERROR:", "").strip()
+    normalized = text.lower()
+    if "sign in to confirm" in normalized and "not a bot" in normalized:
+        return (
+            "YouTube asked for sign-in/bot verification. Configure APP_YTDLP_COOKIE_FILE "
+            "with exported browser cookies, or APP_YTDLP_COOKIES_FROM_BROWSER where available, then retry."
+        )
     return text or "Something went wrong."

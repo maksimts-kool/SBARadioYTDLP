@@ -54,6 +54,26 @@ Useful settings:
 - `APP_MAX_DURATION_SECONDS`: maximum duration for one item.
 - `APP_MAX_ACTIVE_JOBS`: active background jobs allowed at once.
 - `APP_CLEANUP_AFTER_SECONDS`: how long completed temp files stay available.
+- `APP_YTDLP_COOKIE_FILE`: path inside the backend container to an exported Netscape cookies file.
+- `APP_YTDLP_COOKIES_FROM_BROWSER`: optional `yt-dlp` browser cookie spec, such as `firefox` or `chrome:Default`.
+- `YTDLP_COOKIE_FILE_HOST_PATH`: host path to mount as `/cookies/youtube.txt` in Portainer deployments.
+
+### YouTube Cookies
+
+Some YouTube videos require signed-in cookies and may fail with `Sign in to confirm you're not a bot`. Export cookies from a browser where YouTube is signed in, mount that file into the backend container, and point `APP_YTDLP_COOKIE_FILE` at the in-container path.
+
+Example local override:
+
+```bash
+mkdir -p cookies
+cp youtube-cookies.txt cookies/youtube.txt
+```
+
+The local Docker Compose stack mounts `./cookies` into the backend and uses `/cookies/youtube.txt` by default.
+
+Keep exported cookies private. They are account credentials and should not be committed to git.
+
+`APP_YTDLP_COOKIES_FROM_BROWSER=firefox` or `APP_YTDLP_COOKIES_FROM_BROWSER=chrome:Default` is also supported, but it only works when the backend process can read that browser profile. For Docker or Portainer deployments, an exported cookies file is usually simpler.
 
 ## Deploy the Frontend to Vercel
 
@@ -108,12 +128,12 @@ VITE_API_BASE=https://api.143.198.60.223.sslip.io/api
 VITE_ENABLE_JOB_EVENTS=true
 ```
 
-If deployment fails with `port is already allocated`, another reverse proxy is already using ports `80` or `443`. In that case, use `docker-compose.portainer-backend.yml` instead. Set `BACKEND_BIND_ADDRESS` to your server IP if you want Portainer to show `143.198.60.223:8010` instead of `0.0.0.0:8010`.
+If deployment fails with `port is already allocated`, another reverse proxy is already using ports `80` or `443`. In that case, use `docker-compose.portainer-backend.yml` instead. Set `BACKEND_BIND_ADDRESS` to your server IP if you want Portainer to show `143.198.60.223:7020` instead of `0.0.0.0:7020`.
 
 Point your existing reverse proxy to:
 
 ```text
-http://143.198.60.223:8010
+http://143.198.60.223:7020
 ```
 
 For this backend-only stack, set:
@@ -121,9 +141,11 @@ For this backend-only stack, set:
 ```bash
 Compose path: docker-compose.portainer-backend.yml
 BACKEND_BIND_ADDRESS=143.198.60.223
-BACKEND_PORT=8010
+BACKEND_PORT=7020
 APP_ALLOWED_ORIGINS=https://sba-radio-ytdlp-qa97.vercel.app
 APP_ALLOWED_ORIGIN_REGEX=^https://sba-radio-ytdlp.*\.vercel\.app$
+APP_YTDLP_COOKIE_FILE=/cookies/youtube.txt
+YTDLP_COOKIE_FILE_HOST_PATH=/opt/sbaradio-ytdlp/youtube.txt
 ```
 
 Use `BACKEND_BIND_ADDRESS=127.0.0.1` if you only want the backend reachable from a reverse proxy on the same server. Use `BACKEND_BIND_ADDRESS=0.0.0.0` if binding to the server IP fails or you intentionally want Docker to publish on every interface.

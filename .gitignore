@@ -13,3 +13,7 @@ coverage/
 downloads/
 tmp/
 
+cookies/
+cookies.txt
+youtube-cookies.txt
+*.cookies.txt
