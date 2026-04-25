@@ -14,6 +14,6 @@ services:
       APP_YTDLP_COOKIE_FILE: ${APP_YTDLP_COOKIE_FILE:-/cookies/youtube.txt}
       APP_YTDLP_COOKIES_FROM_BROWSER: ${APP_YTDLP_COOKIES_FROM_BROWSER:-}
     volumes:
-      - ${YTDLP_COOKIE_FILE_HOST_PATH:-/opt/sbaradio-ytdlp/youtube.txt}:/cookies/youtube.txt:ro
+      - ${YTDLP_COOKIE_FILE_HOST_PATH:-/opt/sbaradio-ytdlp/youtube.txt}:/cookies/youtube.txt
     ports:
       - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"

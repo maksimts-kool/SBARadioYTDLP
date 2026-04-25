@@ -71,7 +71,7 @@ cp youtube-cookies.txt cookies/youtube.txt
 
 The local Docker Compose stack mounts `./cookies` into the backend and uses `/cookies/youtube.txt` by default.
 
-Keep exported cookies private. They are account credentials and should not be committed to git.
+Keep exported cookies private. They are account credentials and should not be committed to git. The backend needs write access because `yt-dlp` saves the cookie jar after use.
 
 `APP_YTDLP_COOKIES_FROM_BROWSER=firefox` or `APP_YTDLP_COOKIES_FROM_BROWSER=chrome:Default` is also supported, but it only works when the backend process can read that browser profile. For Docker or Portainer deployments, an exported cookies file is usually simpler.
 

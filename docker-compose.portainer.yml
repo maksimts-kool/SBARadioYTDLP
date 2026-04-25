@@ -14,7 +14,7 @@ services:
       APP_YTDLP_COOKIE_FILE: ${APP_YTDLP_COOKIE_FILE:-/cookies/youtube.txt}
       APP_YTDLP_COOKIES_FROM_BROWSER: ${APP_YTDLP_COOKIES_FROM_BROWSER:-}
     volumes:
-      - ${YTDLP_COOKIE_FILE_HOST_PATH:-/opt/sbaradio-ytdlp/youtube.txt}:/cookies/youtube.txt:ro
+      - ${YTDLP_COOKIE_FILE_HOST_PATH:-/opt/sbaradio-ytdlp/youtube.txt}:/cookies/youtube.txt
 
   caddy:
     image: caddy:2-alpine

@@ -13,7 +13,7 @@ services:
       APP_YTDLP_COOKIE_FILE: ${APP_YTDLP_COOKIE_FILE:-/cookies/youtube.txt}
       APP_YTDLP_COOKIES_FROM_BROWSER: ${APP_YTDLP_COOKIES_FROM_BROWSER:-}
     volumes:
-      - ./cookies:/cookies:ro
+      - ./cookies:/cookies
     ports:
       - "${BACKEND_PORT:-8000}:8000"
 
