@@ -53,3 +53,6 @@ export interface JobCreateRequest {
   termsAccepted: boolean;
 }
 
+export interface ServerStatusResponse {
+  status: "ok";
+}

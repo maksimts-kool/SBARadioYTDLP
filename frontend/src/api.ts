@@ -1,4 +1,4 @@
-import type { JobCreateRequest, JobStatusResponse, PreviewResponse } from "./types";
+import type { JobCreateRequest, JobStatusResponse, PreviewResponse, ServerStatusResponse } from "./types";
 
 const API_BASE = normalizeApiBase(import.meta.env.VITE_API_BASE ?? "/api");
 const ENABLE_JOB_EVENTS = import.meta.env.VITE_ENABLE_JOB_EVENTS !== "false";
@@ -43,6 +43,10 @@ export function previewUrl(url: string): Promise<PreviewResponse> {
     method: "POST",
     body: JSON.stringify({ url })
   });
+}
+
+export function getServerStatus(): Promise<ServerStatusResponse> {
+  return apiFetch<ServerStatusResponse>("/health");
 }
 
 export function startJob(payload: JobCreateRequest): Promise<JobStatusResponse> {

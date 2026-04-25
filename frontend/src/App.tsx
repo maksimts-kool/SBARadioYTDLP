@@ -31,13 +31,14 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Download, FileAudio, Film, LinkIcon, PackageCheck, Search, Trash2, XCircle } from "lucide-react";
 import { z } from "zod";
-import { ApiError, cancelJob, downloadUrl, getAvailableJobs, getJob, jobEventsUrl, previewUrl, startJob } from "./api";
+import { ApiError, cancelJob, downloadUrl, getAvailableJobs, getJob, getServerStatus, jobEventsUrl, previewUrl, startJob } from "./api";
 import type { JobStatusResponse, MediaKind, PreviewEntry, PreviewResponse } from "./types";
 
 const urlSchema = z.string().url("Enter a valid YouTube URL.");
 const MAX_SELECTED_ITEMS = 50;
 const CURRENT_JOB_STORAGE_KEY = "sbaradio-ytdlp-current-job-id";
 const TERMINAL_JOB_STATUSES = new Set<JobStatusResponse["status"]>(["ready", "failed", "cancelled"]);
+type ServerStatusState = "checking" | "online" | "offline";
 
 const qualityOptions: Record<MediaKind, string[]> = {
   mp4: ["best", "1080p", "720p", "480p", "360p"],
@@ -118,11 +119,19 @@ function App() {
     queryFn: getAvailableJobs
   });
 
+  const serverStatusQuery = useQuery({
+    queryKey: ["server-status"],
+    queryFn: getServerStatus,
+    refetchInterval: 10000,
+    retry: false
+  });
+
   const job = liveJob ?? polledJob.data ?? null;
   const availableJobs = (availableJobsQuery.data ?? []).filter((availableJob) => availableJob.jobId !== job?.jobId);
   const isWorking = job ? !isTerminalJobStatus(job.status) : false;
   const selectedCount = preview?.kind === "playlist" ? selectedIds.length : preview ? 1 : 0;
   const canStart = Boolean(preview) && selectedCount > 0 && selectedCount <= MAX_SELECTED_ITEMS && termsAccepted && !isWorking;
+  const serverStatus: ServerStatusState = serverStatusQuery.error ? "offline" : serverStatusQuery.data?.status === "ok" ? "online" : "checking";
 
   useEffect(() => {
     if (!jobId) {
@@ -244,7 +253,7 @@ function App() {
     <Box className="min-h-screen bg-[radial-gradient(circle_at_top_left,#e9f4f1_0,#f6f7f4_32rem,#f1efe8_100%)]">
       <Container maxWidth="lg" className="py-8 md:py-10">
         <Stack spacing={3}>
-          <Header />
+          <Header serverStatus={serverStatus} />
 
           <Paper variant="outlined" className="p-4 md:p-5">
             <Stack component="form" onSubmit={submitPreview} spacing={2}>
@@ -372,21 +381,51 @@ function clearStoredJobId() {
   }
 }
 
-function Header() {
+function Header({ serverStatus }: { serverStatus: ServerStatusState }) {
+  const statusLabel = {
+    checking: "Server checking",
+    online: "Server online",
+    offline: "Server offline"
+  }[serverStatus];
+
+  const chipColor = {
+    checking: "default",
+    online: "success",
+    offline: "error"
+  }[serverStatus] as "default" | "success" | "error";
+
   return (
     <Stack spacing={1}>
-      <Stack direction="row" spacing={1.25} alignItems="center">
-        <Box className="grid h-10 w-10 place-items-center rounded bg-[#1f6f78] text-white">
-          <Download size={21} />
-        </Box>
-        <Box>
-          <Typography variant="h4" component="h1" fontWeight={800}>
-            SBARadioYTDLP
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            YouTube video and playlist downloader
-          </Typography>
-        </Box>
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }}>
+        <Stack direction="row" spacing={1.25} alignItems="center">
+          <Box className="grid h-10 w-10 place-items-center rounded bg-[#1f6f78] text-white">
+            <Download size={21} />
+          </Box>
+          <Box>
+            <Typography variant="h4" component="h1" fontWeight={800}>
+              SBARadioYTDLP
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              YouTube video and playlist downloader
+            </Typography>
+          </Box>
+        </Stack>
+
+        <Chip
+          color={chipColor}
+          variant={serverStatus === "online" ? "filled" : "outlined"}
+          icon={
+            serverStatus === "checking" ? (
+              <CircularProgress size={14} color="inherit" />
+            ) : serverStatus === "online" ? (
+              <CheckCircle2 size={16} />
+            ) : (
+              <XCircle size={16} />
+            )
+          }
+          label={statusLabel}
+          aria-label={statusLabel}
+        />
       </Stack>
     </Stack>
   );
