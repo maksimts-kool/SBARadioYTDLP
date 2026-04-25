@@ -192,6 +192,7 @@ def metadata_options(settings: Settings) -> Dict[str, Any]:
         "no_warnings": True,
         "extract_flat": "in_playlist",
         "skip_download": True,
+        "ignore_no_formats_error": True,
     }
     opts.update(ytdlp_auth_options(settings))
     return opts

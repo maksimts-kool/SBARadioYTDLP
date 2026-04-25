@@ -5,6 +5,7 @@ from app.downloader import (
     clean_error,
     entry_video_url,
     parse_cookies_from_browser,
+    metadata_options,
     ytdlp_auth_options,
     ytdlp_options,
 )
@@ -29,7 +30,10 @@ def test_ytdlp_auth_options_uses_cookie_file():
 
 
 def test_ytdlp_auth_options_parses_cookies_from_browser():
-    settings = Settings(ytdlp_cookies_from_browser=" Chrome+gnomekeyring:Profile 1 ")
+    settings = Settings(
+        ytdlp_cookie_file="",
+        ytdlp_cookies_from_browser=" Chrome+gnomekeyring:Profile 1 ",
+    )
 
     assert ytdlp_auth_options(settings) == {
         "cookiesfrombrowser": ("chrome", "Profile 1", "GNOMEKEYRING", None)
@@ -64,6 +68,14 @@ def test_ytdlp_options_includes_cookie_auth(tmp_path):
 
     assert opts["cookiefile"] == "/cookies/youtube.txt"
     assert opts["format"] == "bv*+ba/b"
+
+
+def test_metadata_options_ignore_missing_formats_for_preview():
+    opts = metadata_options(Settings(ytdlp_cookie_file="/cookies/youtube.txt"))
+
+    assert opts["cookiefile"] == "/cookies/youtube.txt"
+    assert opts["skip_download"] is True
+    assert opts["ignore_no_formats_error"] is True
 
 
 def test_clean_error_guides_bot_check_to_cookie_settings():
