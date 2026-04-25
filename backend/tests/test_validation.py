@@ -68,3 +68,13 @@ def test_safe_filename_has_fallback():
 def test_settings_splits_allowed_origins():
     settings = Settings(allowed_origins="http://localhost:5173, http://127.0.0.1:5173")
     assert settings.allowed_origin_list == ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+
+def test_settings_normalizes_allowed_origins():
+    settings = Settings(allowed_origins="https://example.vercel.app/, https://other.vercel.app")
+    assert settings.allowed_origin_list == ["https://example.vercel.app", "https://other.vercel.app"]
+
+
+def test_settings_ignores_empty_origin_regex():
+    settings = Settings(allowed_origin_regex=" ")
+    assert settings.allowed_origin_regex_pattern is None

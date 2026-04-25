@@ -4,6 +4,7 @@ services:
       context: ./backend
     environment:
       APP_ALLOWED_ORIGINS: ${APP_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      APP_ALLOWED_ORIGIN_REGEX: ${APP_ALLOWED_ORIGIN_REGEX:-}
       APP_TEMP_ROOT: ${APP_TEMP_ROOT:-/tmp/sbaradio-ytdlp}
       APP_MAX_PLAYLIST_ITEMS: ${APP_MAX_PLAYLIST_ITEMS:-50}
       APP_MAX_DURATION_SECONDS: ${APP_MAX_DURATION_SECONDS:-14400}
@@ -21,4 +22,3 @@ services:
       - "${FRONTEND_PORT:-5173}:5173"
     depends_on:
       - backend
-

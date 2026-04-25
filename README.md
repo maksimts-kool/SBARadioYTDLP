@@ -64,6 +64,7 @@ This repository includes a `vercel.json` for deploying the Vite frontend from th
 
 ```bash
 APP_ALLOWED_ORIGINS=https://your-project.vercel.app
+APP_ALLOWED_ORIGIN_REGEX=^https://your-project.*\.vercel\.app$
 ```
 
 3. In the Vercel project settings, add the values from `frontend/.env.example`:
@@ -91,6 +92,7 @@ In Portainer, create a stack from this Git repository and set the values from `b
 Compose path: docker-compose.portainer.yml
 BACKEND_HOSTNAME=api.143.198.60.223.sslip.io
 APP_ALLOWED_ORIGINS=https://your-vercel-project.vercel.app
+APP_ALLOWED_ORIGIN_REGEX=^https://your-vercel-project.*\.vercel\.app$
 ```
 
 Make sure ports `80` and `443` are open on the server firewall. After the stack starts, check:
@@ -106,19 +108,25 @@ VITE_API_BASE=https://api.143.198.60.223.sslip.io/api
 VITE_ENABLE_JOB_EVENTS=true
 ```
 
-If deployment fails with `port is already allocated`, another reverse proxy is already using ports `80` or `443`. In that case, use `docker-compose.portainer-backend.yml` instead and point your existing reverse proxy to:
+If deployment fails with `port is already allocated`, another reverse proxy is already using ports `80` or `443`. In that case, use `docker-compose.portainer-backend.yml` instead. Set `BACKEND_BIND_ADDRESS` to your server IP if you want Portainer to show `143.198.60.223:8010` instead of `0.0.0.0:8010`.
+
+Point your existing reverse proxy to:
 
 ```text
-http://143.198.60.223:8000
+http://143.198.60.223:8010
 ```
 
 For this backend-only stack, set:
 
 ```bash
 Compose path: docker-compose.portainer-backend.yml
-BACKEND_PORT=8000
+BACKEND_BIND_ADDRESS=143.198.60.223
+BACKEND_PORT=8010
 APP_ALLOWED_ORIGINS=https://sba-radio-ytdlp-qa97.vercel.app
+APP_ALLOWED_ORIGIN_REGEX=^https://sba-radio-ytdlp.*\.vercel\.app$
 ```
+
+Use `BACKEND_BIND_ADDRESS=127.0.0.1` if you only want the backend reachable from a reverse proxy on the same server. Use `BACKEND_BIND_ADDRESS=0.0.0.0` if binding to the server IP fails or you intentionally want Docker to publish on every interface.
 
 ## Development Notes
 
