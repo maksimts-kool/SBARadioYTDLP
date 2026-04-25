@@ -447,10 +447,10 @@ function getServerStatusDetail(
     .map(([name, check]) => `${name}: ${check.message}`);
   const summary = failedChecks.length > 0 ? failedChecks.join("; ") : `${data.activeJobs}/${data.maxActiveJobs} active jobs`;
   const refreshNote = isFetching ? " Refreshing now." : "";
-  return `${summary}. Uptime ${formatDuration(data.uptimeSeconds)}.${refreshNote}`;
+  return `${summary}. Uptime ${formatUptime(data.uptimeSeconds)}.${refreshNote}`;
 }
 
-function formatDuration(totalSeconds: number): string {
+function formatUptime(totalSeconds: number): string {
   const seconds = Math.max(0, Math.floor(totalSeconds));
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
