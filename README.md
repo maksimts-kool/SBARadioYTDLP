@@ -52,7 +52,7 @@ Useful settings:
 
 ## Deploy the Frontend to Vercel
 
-This repository includes a root `vercel.json` that builds `frontend/` and serves `frontend/dist`.
+This repository includes a `vercel.json` for deploying the Vite frontend from the `frontend/` root directory.
 
 1. Deploy the FastAPI backend somewhere that supports long-running processes, local temp files, `ffmpeg`, and WebSockets, such as a VPS, Fly.io, Railway, Render, or another container host.
 2. In the backend environment, set `APP_ALLOWED_ORIGINS` to your Vercel site origin:
@@ -70,7 +70,7 @@ VITE_ENABLE_JOB_EVENTS=true
 
 Set `VITE_ENABLE_JOB_EVENTS=false` if your backend host or proxy does not pass WebSocket traffic. The UI will continue polling job status.
 
-4. Import the repository into Vercel with the repository root as the project root. The checked-in `vercel.json` handles install, build, and output directory settings.
+4. Import the repository into Vercel and set the project **Root Directory** to `frontend`. The checked-in `vercel.json` handles install, build, and output directory settings for that root.
 
 The downloader API is intentionally not configured as a Vercel Function. Vercel can run FastAPI, but this backend downloads and converts media, keeps in-memory job state, serves generated files, and streams progress over WebSockets. Those requirements do not fit Vercel Functions well because of function duration limits, response size limits, and realtime connection constraints.
 
