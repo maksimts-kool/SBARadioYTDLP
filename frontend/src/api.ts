@@ -1,6 +1,7 @@
 import type { JobCreateRequest, JobStatusResponse, PreviewResponse } from "./types";
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
+const API_BASE = normalizeApiBase(import.meta.env.VITE_API_BASE ?? "/api");
+const ENABLE_JOB_EVENTS = import.meta.env.VITE_ENABLE_JOB_EVENTS !== "false";
 
 export class ApiError extends Error {
   status: number;
@@ -13,7 +14,7 @@ export class ApiError extends Error {
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(apiUrl(path), {
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -64,11 +65,24 @@ export async function cancelJob(jobId: string): Promise<JobStatusResponse> {
 }
 
 export function downloadUrl(jobId: string): string {
-  return `${API_BASE}/jobs/${jobId}/download`;
+  return apiUrl(`/jobs/${jobId}/download`);
 }
 
-export function jobEventsUrl(jobId: string): string {
-  const url = new URL(`${API_BASE}/jobs/${jobId}/events`, window.location.href);
+export function jobEventsUrl(jobId: string): string | null {
+  if (!ENABLE_JOB_EVENTS) {
+    return null;
+  }
+
+  const url = new URL(apiUrl(`/jobs/${jobId}/events`), window.location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   return url.toString();
+}
+
+function normalizeApiBase(value: string): string {
+  return value.replace(/\/+$/, "") || "/api";
+}
+
+function apiUrl(path: string): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${API_BASE}${normalizedPath}`;
 }

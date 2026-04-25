@@ -129,7 +129,12 @@ function App() {
       return;
     }
 
-    const socket = new WebSocket(jobEventsUrl(jobId));
+    const eventsUrl = jobEventsUrl(jobId);
+    if (!eventsUrl) {
+      return;
+    }
+
+    const socket = new WebSocket(eventsUrl);
     socket.onmessage = (event) => {
       const payload = JSON.parse(event.data) as Partial<JobStatusResponse> & { error?: string };
       if (!payload.jobId) {

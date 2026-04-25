@@ -1,0 +1,29 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      APP_ALLOWED_ORIGINS: ${APP_ALLOWED_ORIGINS}
+      APP_TEMP_ROOT: ${APP_TEMP_ROOT:-/tmp/sbaradio-ytdlp}
+      APP_MAX_PLAYLIST_ITEMS: ${APP_MAX_PLAYLIST_ITEMS:-50}
+      APP_MAX_DURATION_SECONDS: ${APP_MAX_DURATION_SECONDS:-14400}
+      APP_MAX_ACTIVE_JOBS: ${APP_MAX_ACTIVE_JOBS:-1}
+      APP_CLEANUP_AFTER_SECONDS: ${APP_CLEANUP_AFTER_SECONDS:-3600}
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    command: caddy reverse-proxy --from ${BACKEND_HOSTNAME} --to backend:8000
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
