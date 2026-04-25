@@ -148,6 +148,16 @@ APP_YTDLP_COOKIE_FILE=/cookies/youtube.txt
 YTDLP_COOKIE_FILE_HOST_PATH=/opt/sbaradio-ytdlp/youtube.txt
 ```
 
+The backend-only Portainer stack includes Redis. On the server running Docker, enable memory overcommit so Redis background saves do not fail:
+
+```bash
+sudo sysctl vm.overcommit_memory=1
+echo 'vm.overcommit_memory = 1' | sudo tee /etc/sysctl.d/99-redis-overcommit.conf
+sudo sysctl --system
+```
+
+This is a host kernel setting, so it cannot be fixed reliably from inside the Redis container or with an app environment variable.
+
 Use `BACKEND_BIND_ADDRESS=127.0.0.1` if you only want the backend reachable from a reverse proxy on the same server. Use `BACKEND_BIND_ADDRESS=0.0.0.0` if binding to the server IP fails or you intentionally want Docker to publish on every interface.
 
 ## Development Notes
