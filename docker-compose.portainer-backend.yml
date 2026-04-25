@@ -17,3 +17,13 @@ services:
       - ${YTDLP_COOKIE_FILE_HOST_PATH:-/opt/sbaradio-ytdlp/youtube.txt}:/cookies/youtube.txt
     ports:
       - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/ready', timeout=3).read()\"",
+        ]
+      interval: ${BACKEND_HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${BACKEND_HEALTHCHECK_TIMEOUT:-5s}
+      retries: ${BACKEND_HEALTHCHECK_RETRIES:-3}
+      start_period: ${BACKEND_HEALTHCHECK_START_PERIOD:-30s}

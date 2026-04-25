@@ -29,16 +29,39 @@ import {
   Typography
 } from "@mui/material";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Download, FileAudio, Film, LinkIcon, PackageCheck, Search, Trash2, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  Download,
+  FileAudio,
+  Film,
+  LinkIcon,
+  PackageCheck,
+  Search,
+  Trash2,
+  TriangleAlert,
+  XCircle
+} from "lucide-react";
 import { z } from "zod";
-import { ApiError, cancelJob, downloadUrl, getAvailableJobs, getJob, getServerStatus, jobEventsUrl, previewUrl, startJob } from "./api";
-import type { JobStatusResponse, MediaKind, PreviewEntry, PreviewResponse } from "./types";
+import {
+  ApiError,
+  cancelJob,
+  downloadUrl,
+  getAvailableJobs,
+  getJob,
+  getServerStatus,
+  jobEventsUrl,
+  previewUrl,
+  startJob
+} from "./api";
+import type { JobStatusResponse, MediaKind, PreviewEntry, PreviewResponse, ServerStatusResponse } from "./types";
 
 const urlSchema = z.string().url("Enter a valid YouTube URL.");
 const MAX_SELECTED_ITEMS = 50;
 const CURRENT_JOB_STORAGE_KEY = "sbaradio-ytdlp-current-job-id";
 const TERMINAL_JOB_STATUSES = new Set<JobStatusResponse["status"]>(["ready", "failed", "cancelled"]);
-type ServerStatusState = "checking" | "online" | "offline";
+const SERVER_STATUS_HEALTHY_INTERVAL_MS = 30000;
+const SERVER_STATUS_PROBLEM_INTERVAL_MS = 5000;
+type ServerStatusState = "checking" | "online" | "degraded" | "offline";
 
 const qualityOptions: Record<MediaKind, string[]> = {
   mp4: ["best", "1080p", "720p", "480p", "360p"],
@@ -122,8 +145,11 @@ function App() {
   const serverStatusQuery = useQuery({
     queryKey: ["server-status"],
     queryFn: getServerStatus,
-    refetchInterval: 10000,
-    retry: false
+    refetchInterval: (query) =>
+      query.state.error || query.state.data?.status === "degraded" ? SERVER_STATUS_PROBLEM_INTERVAL_MS : SERVER_STATUS_HEALTHY_INTERVAL_MS,
+    refetchIntervalInBackground: true,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, SERVER_STATUS_PROBLEM_INTERVAL_MS)
   });
 
   const job = liveJob ?? polledJob.data ?? null;
@@ -131,7 +157,16 @@ function App() {
   const isWorking = job ? !isTerminalJobStatus(job.status) : false;
   const selectedCount = preview?.kind === "playlist" ? selectedIds.length : preview ? 1 : 0;
   const canStart = Boolean(preview) && selectedCount > 0 && selectedCount <= MAX_SELECTED_ITEMS && termsAccepted && !isWorking;
-  const serverStatus: ServerStatusState = serverStatusQuery.error ? "offline" : serverStatusQuery.data?.status === "ok" ? "online" : "checking";
+  const serverStatus: ServerStatusState = getServerStatusState(
+    serverStatusQuery.data,
+    serverStatusQuery.error,
+    serverStatusQuery.isPending
+  );
+  const serverStatusDetail = getServerStatusDetail(
+    serverStatusQuery.data,
+    serverStatusQuery.error,
+    serverStatusQuery.isFetching
+  );
 
   useEffect(() => {
     if (!jobId) {
@@ -253,7 +288,7 @@ function App() {
     <Box className="min-h-screen bg-[radial-gradient(circle_at_top_left,#e9f4f1_0,#f6f7f4_32rem,#f1efe8_100%)]">
       <Container maxWidth="lg" className="py-8 md:py-10">
         <Stack spacing={3}>
-          <Header serverStatus={serverStatus} />
+          <Header serverStatus={serverStatus} serverStatusDetail={serverStatusDetail} />
 
           <Paper variant="outlined" className="p-4 md:p-5">
             <Stack component="form" onSubmit={submitPreview} spacing={2}>
@@ -381,18 +416,75 @@ function clearStoredJobId() {
   }
 }
 
-function Header({ serverStatus }: { serverStatus: ServerStatusState }) {
+function getServerStatusState(
+  data: ServerStatusResponse | undefined,
+  error: Error | null,
+  isPending: boolean
+): ServerStatusState {
+  if (isPending) {
+    return "checking";
+  }
+  if (error) {
+    return "offline";
+  }
+  return data?.status === "ok" ? "online" : "degraded";
+}
+
+function getServerStatusDetail(
+  data: ServerStatusResponse | undefined,
+  error: Error | null,
+  isFetching: boolean
+): string {
+  if (error) {
+    return `Last check failed. Retrying every ${SERVER_STATUS_PROBLEM_INTERVAL_MS / 1000} seconds. ${errorMessage(error)}`;
+  }
+  if (!data) {
+    return "Waiting for the first server check.";
+  }
+
+  const failedChecks = Object.entries(data.checks)
+    .filter(([, check]) => !check.ok)
+    .map(([name, check]) => `${name}: ${check.message}`);
+  const summary = failedChecks.length > 0 ? failedChecks.join("; ") : `${data.activeJobs}/${data.maxActiveJobs} active jobs`;
+  const refreshNote = isFetching ? " Refreshing now." : "";
+  return `${summary}. Uptime ${formatDuration(data.uptimeSeconds)}.${refreshNote}`;
+}
+
+function formatDuration(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${remainingSeconds}s`;
+  }
+  return `${remainingSeconds}s`;
+}
+
+function Header({
+  serverStatus,
+  serverStatusDetail
+}: {
+  serverStatus: ServerStatusState;
+  serverStatusDetail: string;
+}) {
   const statusLabel = {
-    checking: "Server checking",
+    checking: "Checking server",
     online: "Server online",
+    degraded: "Server degraded",
     offline: "Server offline"
   }[serverStatus];
 
   const chipColor = {
     checking: "default",
     online: "success",
+    degraded: "warning",
     offline: "error"
-  }[serverStatus] as "default" | "success" | "error";
+  }[serverStatus] as "default" | "success" | "warning" | "error";
 
   return (
     <Stack spacing={1}>
@@ -419,12 +511,15 @@ function Header({ serverStatus }: { serverStatus: ServerStatusState }) {
               <CircularProgress size={14} color="inherit" />
             ) : serverStatus === "online" ? (
               <CheckCircle2 size={16} />
+            ) : serverStatus === "degraded" ? (
+              <TriangleAlert size={16} />
             ) : (
               <XCircle size={16} />
             )
           }
           label={statusLabel}
           aria-label={statusLabel}
+          title={serverStatusDetail}
         />
       </Stack>
     </Stack>

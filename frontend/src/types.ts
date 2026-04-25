@@ -54,5 +54,15 @@ export interface JobCreateRequest {
 }
 
 export interface ServerStatusResponse {
-  status: "ok";
+  status: "ok" | "degraded";
+  uptimeSeconds: number;
+  activeJobs: number;
+  maxActiveJobs: number;
+  checks: Record<
+    string,
+    {
+      ok: boolean;
+      message: string;
+    }
+  >;
 }

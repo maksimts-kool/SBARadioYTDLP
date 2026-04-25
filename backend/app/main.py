@@ -4,7 +4,15 @@ import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import (
+    BackgroundTasks,
+    FastAPI,
+    HTTPException,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -17,6 +25,7 @@ from .validation import enforce_playlist_limit, validate_quality, validate_youtu
 
 settings = get_settings()
 manager = JobManager(settings.temp_root, settings.max_active_jobs)
+started_at = utc_now()
 
 
 @asynccontextmanager
@@ -46,8 +55,21 @@ app.add_middleware(
 
 
 @app.get("/api/health")
-def health() -> dict[str, str]:
+def health() -> dict[str, object]:
+    return build_health_payload()
+
+
+@app.get("/api/health/live")
+def liveness() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/health/ready")
+def readiness(response: Response) -> dict[str, object]:
+    payload = build_health_payload()
+    if payload["status"] != "ok":
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return payload
 
 
 @app.post("/api/preview", response_model=PreviewResponse)
@@ -172,3 +194,36 @@ def cleanup_old_jobs() -> None:
             removed = manager.remove(job.id)
             if removed:
                 remove_directory(removed.temp_dir)
+
+
+def build_health_payload() -> dict[str, object]:
+    checks = {
+        "tempRoot": check_temp_root(),
+    }
+    is_ready = all(check["ok"] for check in checks.values())
+
+    return {
+        "status": "ok" if is_ready else "degraded",
+        "uptimeSeconds": round((utc_now() - started_at).total_seconds(), 2),
+        "activeJobs": manager.active_count(),
+        "maxActiveJobs": settings.max_active_jobs,
+        "checks": checks,
+    }
+
+
+def check_temp_root() -> dict[str, object]:
+    probe_path = settings.temp_root / ".healthcheck"
+    try:
+        ensure_directory(settings.temp_root)
+        probe_path.write_text("ok", encoding="utf-8")
+        probe_path.unlink(missing_ok=True)
+    except OSError as exc:
+        return {
+            "ok": False,
+            "message": f"Temp root is not writable: {exc}",
+        }
+
+    return {
+        "ok": True,
+        "message": "Temp root is writable",
+    }
