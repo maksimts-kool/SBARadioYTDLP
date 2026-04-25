@@ -106,6 +106,20 @@ VITE_API_BASE=https://api.143.198.60.223.sslip.io/api
 VITE_ENABLE_JOB_EVENTS=true
 ```
 
+If deployment fails with `port is already allocated`, another reverse proxy is already using ports `80` or `443`. In that case, use `docker-compose.portainer-backend.yml` instead and point your existing reverse proxy to:
+
+```text
+http://143.198.60.223:8000
+```
+
+For this backend-only stack, set:
+
+```bash
+Compose path: docker-compose.portainer-backend.yml
+BACKEND_PORT=8000
+APP_ALLOWED_ORIGINS=https://sba-radio-ytdlp-qa97.vercel.app
+```
+
 ## Development Notes
 
 This is a local-first tool. V1 does not include accounts or hosted multi-user protections. It does include URL validation, playlist size limits, duration limits, one active job by default, isolated temp folders, filename sanitization, cancellation, and cleanup.
