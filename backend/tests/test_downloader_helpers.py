@@ -9,6 +9,7 @@ from app.downloader import (
     metadata_options,
     ytdlp_auth_options,
     ytdlp_options,
+    ytdlp_runtime_options,
 )
 from app.jobs import Job
 from app.models import MediaKind
@@ -69,6 +70,7 @@ def test_ytdlp_options_includes_cookie_auth(tmp_path):
 
     assert opts["cookiefile"] == "/cookies/youtube.txt"
     assert opts["format"] == "bestvideo*+bestaudio/best/bestaudio/bestvideo*"
+    assert opts["js_runtimes"] == {"node": {}}
 
 
 def test_mp4_format_selector_falls_back_to_audio_or_video_only_formats():
@@ -88,6 +90,11 @@ def test_metadata_options_ignore_missing_formats_for_preview():
     assert opts["cookiefile"] == "/cookies/youtube.txt"
     assert opts["skip_download"] is True
     assert opts["ignore_no_formats_error"] is True
+    assert opts["js_runtimes"] == {"node": {}}
+
+
+def test_ytdlp_runtime_options_enable_node_js_challenges():
+    assert ytdlp_runtime_options() == {"js_runtimes": {"node": {}}}
 
 
 def test_clean_error_guides_bot_check_to_cookie_settings():

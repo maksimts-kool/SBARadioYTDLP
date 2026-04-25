@@ -194,6 +194,7 @@ def metadata_options(settings: Settings) -> Dict[str, Any]:
         "skip_download": True,
         "ignore_no_formats_error": True,
     }
+    opts.update(ytdlp_runtime_options())
     opts.update(ytdlp_auth_options(settings))
     return opts
 
@@ -254,6 +255,7 @@ def ytdlp_options(job: Job, download_dir: Path, settings: Settings) -> Dict[str,
         "windowsfilenames": True,
         "continuedl": True,
     }
+    base.update(ytdlp_runtime_options())
     base.update(ytdlp_auth_options(settings))
 
     if job.kind.value == "mp3":
@@ -298,6 +300,10 @@ def ytdlp_auth_options(settings: Settings) -> Dict[str, Any]:
     if settings.ytdlp_browser_cookie_spec:
         opts["cookiesfrombrowser"] = parse_cookies_from_browser(settings.ytdlp_browser_cookie_spec)
     return opts
+
+
+def ytdlp_runtime_options() -> Dict[str, Any]:
+    return {"js_runtimes": {"node": {}}}
 
 
 def parse_cookies_from_browser(
