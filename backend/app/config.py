@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     cleanup_interval_seconds: int = 10 * 60
     ytdlp_cookie_file: str = ""
     ytdlp_cookies_from_browser: str = ""
+    redis_url: str = ""
+    redis_healthcheck_timeout_seconds: float = 1.0
 
     @property
     def allowed_origin_list(self) -> list[str]:
@@ -38,6 +40,11 @@ class Settings(BaseSettings):
     def ytdlp_browser_cookie_spec(self) -> str | None:
         spec = self.ytdlp_cookies_from_browser.strip()
         return spec or None
+
+    @property
+    def redis_connection_url(self) -> str | None:
+        url = self.redis_url.strip()
+        return url or None
 
 
 def normalize_origin(origin: str) -> str:

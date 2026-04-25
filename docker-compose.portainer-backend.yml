@@ -1,8 +1,24 @@
 services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: ${REDIS_HEALTHCHECK_INTERVAL:-10s}
+      timeout: ${REDIS_HEALTHCHECK_TIMEOUT:-3s}
+      retries: ${REDIS_HEALTHCHECK_RETRIES:-5}
+      start_period: ${REDIS_HEALTHCHECK_START_PERIOD:-10s}
+
   backend:
     build:
       context: ./backend
     restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
     environment:
       APP_ALLOWED_ORIGINS: ${APP_ALLOWED_ORIGINS}
       APP_ALLOWED_ORIGIN_REGEX: ${APP_ALLOWED_ORIGIN_REGEX:-}
@@ -13,6 +29,8 @@ services:
       APP_CLEANUP_AFTER_SECONDS: ${APP_CLEANUP_AFTER_SECONDS:-3600}
       APP_YTDLP_COOKIE_FILE: ${APP_YTDLP_COOKIE_FILE:-/cookies/youtube.txt}
       APP_YTDLP_COOKIES_FROM_BROWSER: ${APP_YTDLP_COOKIES_FROM_BROWSER:-}
+      APP_REDIS_URL: ${APP_REDIS_URL:-redis://redis:6379/0}
+      APP_REDIS_HEALTHCHECK_TIMEOUT_SECONDS: ${APP_REDIS_HEALTHCHECK_TIMEOUT_SECONDS:-1}
     volumes:
       - ${YTDLP_COOKIE_FILE_HOST_PATH:-/opt/sbaradio-ytdlp/youtube.txt}:/cookies/youtube.txt
     ports:
@@ -27,3 +45,6 @@ services:
       timeout: ${BACKEND_HEALTHCHECK_TIMEOUT:-5s}
       retries: ${BACKEND_HEALTHCHECK_RETRIES:-3}
       start_period: ${BACKEND_HEALTHCHECK_START_PERIOD:-30s}
+
+volumes:
+  redis-data:

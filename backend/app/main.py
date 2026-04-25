@@ -199,6 +199,7 @@ def cleanup_old_jobs() -> None:
 def build_health_payload() -> dict[str, object]:
     checks = {
         "tempRoot": check_temp_root(),
+        "redis": check_redis(),
     }
     is_ready = all(check["ok"] for check in checks.values())
 
@@ -226,4 +227,41 @@ def check_temp_root() -> dict[str, object]:
     return {
         "ok": True,
         "message": "Temp root is writable",
+    }
+
+
+def check_redis() -> dict[str, object]:
+    redis_url = settings.redis_connection_url
+    if redis_url is None:
+        return {
+            "ok": True,
+            "message": "Redis check disabled",
+        }
+
+    try:
+        import redis
+
+        client = redis.Redis.from_url(
+            redis_url,
+            socket_connect_timeout=settings.redis_healthcheck_timeout_seconds,
+            socket_timeout=settings.redis_healthcheck_timeout_seconds,
+        )
+        try:
+            client.ping()
+        finally:
+            client.close()
+    except ImportError:
+        return {
+            "ok": False,
+            "message": "Redis package is not installed",
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "message": f"Redis is not reachable: {exc}",
+        }
+
+    return {
+        "ok": True,
+        "message": "Redis ping succeeded",
     }
