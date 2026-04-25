@@ -43,6 +43,11 @@ Copy `.env.example` to `.env` if you want to change ports or limits.
 cp .env.example .env
 ```
 
+Service-specific examples are available for hosted deployments:
+
+- `backend/.env.example`: backend and Portainer stack variables.
+- `frontend/.env.example`: Vercel/Vite frontend variables.
+
 Useful settings:
 
 - `APP_MAX_PLAYLIST_ITEMS`: maximum selected playlist entries per job.
@@ -61,7 +66,7 @@ This repository includes a `vercel.json` for deploying the Vite frontend from th
 APP_ALLOWED_ORIGINS=https://your-project.vercel.app
 ```
 
-3. In the Vercel project settings, add:
+3. In the Vercel project settings, add the values from `frontend/.env.example`:
 
 ```bash
 VITE_API_BASE=https://your-backend.example.com/api
@@ -80,7 +85,7 @@ Use `docker-compose.portainer.yml` when deploying the backend to a server throug
 
 If you do not have a domain yet, `api.143.198.60.223.sslip.io` resolves to `143.198.60.223` and can be used as a temporary HTTPS hostname.
 
-In Portainer, create a stack from this Git repository and set:
+In Portainer, create a stack from this Git repository and set the values from `backend/.env.example`:
 
 ```bash
 Compose path: docker-compose.portainer.yml
