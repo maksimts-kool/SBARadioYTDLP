@@ -5,6 +5,7 @@ from app.downloader import (
     clean_error,
     entry_video_url,
     parse_cookies_from_browser,
+    mp4_format_selector,
     metadata_options,
     ytdlp_auth_options,
     ytdlp_options,
@@ -67,7 +68,18 @@ def test_ytdlp_options_includes_cookie_auth(tmp_path):
     opts = ytdlp_options(job, tmp_path, Settings(ytdlp_cookie_file="/cookies/youtube.txt"))
 
     assert opts["cookiefile"] == "/cookies/youtube.txt"
-    assert opts["format"] == "bv*+ba/b"
+    assert opts["format"] == "bestvideo*+bestaudio/best/bestaudio/bestvideo*"
+
+
+def test_mp4_format_selector_falls_back_to_audio_or_video_only_formats():
+    assert mp4_format_selector("best") == "bestvideo*+bestaudio/best/bestaudio/bestvideo*"
+    assert mp4_format_selector("720p") == (
+        "bestvideo*[height<=720]+bestaudio/"
+        "best[height<=720]/"
+        "bestaudio/"
+        "bestvideo*[height<=720]/"
+        "best"
+    )
 
 
 def test_metadata_options_ignore_missing_formats_for_preview():

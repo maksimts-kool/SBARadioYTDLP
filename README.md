@@ -104,13 +104,13 @@ The downloader API is intentionally not configured as a Vercel Function. Vercel 
 
 Use `docker-compose.portainer.yml` when deploying the backend to a server through Portainer. It runs only the FastAPI downloader plus Caddy for HTTPS.
 
-If you do not have a domain yet, `api.143.198.60.223.sslip.io` resolves to `143.198.60.223` and can be used as a temporary HTTPS hostname.
+If you do not have a domain yet, `api.134.122.86.28.sslip.io` resolves to `143.198.60.223` and can be used as a temporary HTTPS hostname.
 
 In Portainer, create a stack from this Git repository and set the values from `backend/.env.example`:
 
 ```bash
 Compose path: docker-compose.portainer.yml
-BACKEND_HOSTNAME=api.143.198.60.223.sslip.io
+BACKEND_HOSTNAME=api.134.122.86.28.sslip.io
 APP_ALLOWED_ORIGINS=https://your-vercel-project.vercel.app
 APP_ALLOWED_ORIGIN_REGEX=^https://your-vercel-project.*\.vercel\.app$
 ```
@@ -118,29 +118,29 @@ APP_ALLOWED_ORIGIN_REGEX=^https://your-vercel-project.*\.vercel\.app$
 Make sure ports `80` and `443` are open on the server firewall. After the stack starts, check:
 
 ```bash
-https://api.143.198.60.223.sslip.io/api/health
+https://api.134.122.86.28.sslip.io/api/health
 ```
 
 Then set this in Vercel:
 
 ```bash
-VITE_API_BASE=https://api.143.198.60.223.sslip.io/api
+VITE_API_BASE=https://api.134.122.86.28.sslip.io/api
 VITE_ENABLE_JOB_EVENTS=true
 ```
 
-If deployment fails with `port is already allocated`, another reverse proxy is already using ports `80` or `443`. In that case, use `docker-compose.portainer-backend.yml` instead. Set `BACKEND_BIND_ADDRESS` to your server IP if you want Portainer to show `143.198.60.223:7020` instead of `0.0.0.0:7020`.
+If deployment fails with `port is already allocated`, another reverse proxy is already using ports `80` or `443`. In that case, use `docker-compose.portainer-backend.yml` instead. Set `BACKEND_BIND_ADDRESS` to your server IP if you want Portainer to show `134.122.86.28:7020` instead of `0.0.0.0:7020`.
 
 Point your existing reverse proxy to:
 
 ```text
-http://143.198.60.223:7020
+http://134.122.86.28:7020
 ```
 
 For this backend-only stack, set:
 
 ```bash
 Compose path: docker-compose.portainer-backend.yml
-BACKEND_BIND_ADDRESS=143.198.60.223
+BACKEND_BIND_ADDRESS=134.122.86.28
 BACKEND_PORT=7020
 APP_ALLOWED_ORIGINS=https://sba-radio-ytdlp-qa97.vercel.app
 APP_ALLOWED_ORIGIN_REGEX=^https://sba-radio-ytdlp.*\.vercel\.app$

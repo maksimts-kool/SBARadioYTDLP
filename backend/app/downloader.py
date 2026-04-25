@@ -272,13 +272,23 @@ def ytdlp_options(job: Job, download_dir: Path, settings: Settings) -> Dict[str,
         )
         return base
 
-    if job.quality == "best":
-        fmt = "bv*+ba/b"
-    else:
-        height = job.quality.rstrip("p")
-        fmt = f"bv*[height<={height}]+ba/b[height<={height}]/b"
+    fmt = mp4_format_selector(job.quality)
     base.update({"format": fmt, "merge_output_format": "mp4"})
     return base
+
+
+def mp4_format_selector(quality: str) -> str:
+    if quality == "best":
+        return "bestvideo*+bestaudio/best/bestaudio/bestvideo*"
+
+    height = quality.rstrip("p")
+    return (
+        f"bestvideo*[height<={height}]+bestaudio/"
+        f"best[height<={height}]/"
+        "bestaudio/"
+        f"bestvideo*[height<={height}]/"
+        "best"
+    )
 
 
 def ytdlp_auth_options(settings: Settings) -> Dict[str, Any]:
