@@ -171,18 +171,14 @@ class JobManager:
 
     def get(self, job_id: str) -> Optional[Job]:
         with self._lock:
-            job = self._jobs.get(job_id)
-            if job is not None:
-                return job
-            if not self.redis_store:
-                return None
-            payload = self.redis_store.load_job_payload(job_id)
-            if payload is None:
-                return None
-            job = Job.from_payload(payload)
-            self._attach_cancel_checker(job)
-            self._jobs[job.id] = job
-            return job
+            if self.redis_store:
+                try:
+                    job = self._load_job_from_redis(job_id)
+                except Exception:
+                    job = None
+                if job is not None:
+                    return job
+            return self._jobs.get(job_id)
 
     def require(self, job_id: str) -> Job:
         job = self.get(job_id)
@@ -218,9 +214,21 @@ class JobManager:
     def remove(self, job_id: str) -> Optional[Job]:
         with self._lock:
             job = self._jobs.pop(job_id, None)
+            if job is None and self.redis_store:
+                try:
+                    payload = self.redis_store.load_job_payload(job_id)
+                    if payload is not None:
+                        job = Job.from_payload(payload)
+                except Exception:
+                    job = None
             if job is not None:
                 self._remember(job)
                 self._release_active_slot(job.id)
+                if self.redis_store:
+                    try:
+                        self.redis_store.delete_job(job.id)
+                    except Exception:
+                        pass
             return job
 
     def all(self) -> list[Job]:
@@ -302,6 +310,17 @@ class JobManager:
     def _attach_cancel_checker(self, job: Job) -> None:
         if self.redis_store:
             job.cancel_check = self.redis_store.is_cancel_requested
+
+    def _load_job_from_redis(self, job_id: str) -> Optional[Job]:
+        if not self.redis_store:
+            return None
+        payload = self.redis_store.load_job_payload(job_id)
+        if payload is None:
+            return None
+        job = Job.from_payload(payload)
+        self._attach_cancel_checker(job)
+        self._jobs[job.id] = job
+        return job
 
 
 def parse_datetime(value: str) -> datetime:

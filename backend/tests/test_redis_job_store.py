@@ -11,6 +11,7 @@ class FakeRedisJobStore:
         self.released: list[str] = []
         self.enqueued: list[str] = []
         self.payloads: dict[str, dict[str, object]] = {}
+        self.deleted: list[str] = []
 
     def reserve_active_slot(self, job_id: str, max_active_jobs: int) -> bool:
         return self.reserve_result
@@ -45,6 +46,10 @@ class FakeRedisJobStore:
     def is_cancel_requested(self, job_id: str) -> bool:
         payload = self.payloads.get(job_id)
         return payload is not None and payload.get("status") == JobState.cancelled.value
+
+    def delete_job(self, job_id: str) -> None:
+        self.deleted.append(job_id)
+        self.payloads.pop(job_id, None)
 
 
 def test_job_manager_uses_redis_for_active_capacity(tmp_path):
@@ -111,3 +116,31 @@ def test_job_manager_enqueues_and_loads_redis_job_payload(tmp_path):
     assert loaded is not None
     assert loaded.id == job.id
     assert loaded.cancel_check is not None
+
+
+def test_job_manager_prefers_fresh_redis_payload_over_local_stale_job(tmp_path):
+    redis_store = FakeRedisJobStore()
+    manager = JobManager(tmp_path, max_active_jobs=1, redis_store=redis_store)
+
+    job = manager.create("https://www.youtube.com/watch?v=abc12345678", MediaKind.mp4, "best", [], enforce_capacity=False)
+    redis_store.payloads[job.id]["status"] = JobState.ready.value
+    redis_store.payloads[job.id]["progress"] = 100
+    redis_store.payloads[job.id]["message"] = "Ready to download"
+
+    loaded = manager.get(job.id)
+
+    assert loaded is not None
+    assert loaded.status == JobState.ready
+    assert loaded.progress == 100
+
+
+def test_job_manager_remove_deletes_redis_payload(tmp_path):
+    redis_store = FakeRedisJobStore()
+    manager = JobManager(tmp_path, max_active_jobs=1, redis_store=redis_store)
+
+    job = manager.create("https://www.youtube.com/watch?v=abc12345678", MediaKind.mp4, "best", [], enforce_capacity=False)
+    removed = manager.remove(job.id)
+
+    assert removed is not None
+    assert redis_store.deleted == [job.id]
+    assert redis_store.payloads == {}
