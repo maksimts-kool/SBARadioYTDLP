@@ -39,7 +39,7 @@ const en = {
     updated: (time: string) => `Updated ${time}`,
     refresh: "Refresh",
     logout: "Log out",
-    enterIp: "Enter an IP address.",
+    enterDevice: "Enter a device id.",
     cleanupDone: (files: number, bytes: string) => `Deleted ${files} files (${bytes}).`,
     stats: {
       activeJobs: "Active downloads",
@@ -47,8 +47,18 @@ const en = {
       tempUsed: "Temp files",
       diskFree: "Disk free",
       used: "used",
-      visitors: "Unique IPs",
-      blockedIps: "Blocked IPs"
+      devices: "Devices",
+      blockedDevices: "Blocked devices"
+    },
+    visuals: {
+      diskUsage: "Disk usage",
+      tempFiles: "Temp files",
+      capacity: "Download capacity",
+      activeOfMax: (active: number, max: number) => `${active} of ${max} active slots`,
+      jobStatus: "Job status",
+      jobsTracked: (count: number) => `${count} job${count === 1 ? "" : "s"} tracked`,
+      recentActivity: "Recent activity",
+      lastSevenDays: "Jobs updated in the last 7 days"
     },
     jobs: {
       title: "Downloads",
@@ -82,9 +92,10 @@ const en = {
       time: "Time"
     },
     visitors: {
-      title: "Visitor IPs",
-      subtitle: "Unique IPs that touched the backend",
-      ip: "IP address",
+      title: "Devices",
+      subtitle: "Browser devices that used this app",
+      device: "Device",
+      lastIp: "Last IP",
       lastSeen: "Last seen",
       requests: "Requests",
       lastPath: "Last path",
@@ -106,7 +117,7 @@ const en = {
       tempFiles: "No temp files.",
       activeUploads: "No active uploads.",
       uploadHistory: "No upload history yet.",
-      visitors: "No visitor IPs recorded yet.",
+      visitors: "No browser devices recorded yet.",
       events: "No events yet."
     }
   },
@@ -256,7 +267,7 @@ const ru: typeof en = {
     updated: (time) => `Обновлено ${time}`,
     refresh: "Обновить",
     logout: "Выйти",
-    enterIp: "Введите IP-адрес.",
+    enterDevice: "Введите ID устройства.",
     cleanupDone: (files, bytes) => `Удалено файлов: ${files} (${bytes}).`,
     stats: {
       activeJobs: "Активные загрузки",
@@ -264,8 +275,18 @@ const ru: typeof en = {
       tempUsed: "Временные файлы",
       diskFree: "Свободно на диске",
       used: "использовано",
-      visitors: "Уникальные IP",
-      blockedIps: "Заблокированные IP"
+      devices: "Устройства",
+      blockedDevices: "Заблокированные устройства"
+    },
+    visuals: {
+      diskUsage: "Использование диска",
+      tempFiles: "Временные файлы",
+      capacity: "Лимит загрузок",
+      activeOfMax: (active, max) => `${active} из ${max} активных слотов`,
+      jobStatus: "Статусы задач",
+      jobsTracked: (count) => `${count} ${russianPlural(count, "задача", "задачи", "задач")} учтено`,
+      recentActivity: "Недавняя активность",
+      lastSevenDays: "Задачи, обновленные за последние 7 дней"
     },
     jobs: {
       title: "Загрузки",
@@ -299,9 +320,10 @@ const ru: typeof en = {
       time: "Время"
     },
     visitors: {
-      title: "IP посетителей",
-      subtitle: "Уникальные IP, которые обращались к backend",
-      ip: "IP-адрес",
+      title: "Устройства",
+      subtitle: "Браузерные устройства, которые использовали приложение",
+      device: "Устройство",
+      lastIp: "Последний IP",
       lastSeen: "Последний визит",
       requests: "Запросы",
       lastPath: "Последний путь",
@@ -323,7 +345,7 @@ const ru: typeof en = {
       tempFiles: "Временных файлов нет.",
       activeUploads: "Активных отдач нет.",
       uploadHistory: "Истории отдачи пока нет.",
-      visitors: "IP посетителей пока не записаны.",
+      visitors: "Браузерные устройства пока не записаны.",
       events: "Событий пока нет."
     }
   },

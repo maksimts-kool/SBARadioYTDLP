@@ -1,5 +1,5 @@
 import type {
-  AdminBlockedIpsResponse,
+  AdminBlockedDevicesResponse,
   AdminCleanupResponse,
   AdminDashboardResponse,
   AdminSessionResponse,
@@ -25,6 +25,9 @@ export class ApiError extends Error {
 
 async function apiFetch<T>(path: string, init?: RequestInit, token?: string): Promise<T> {
   const headers = new Headers(init?.headers);
+  if (!headers.has("X-Device-Id")) {
+    headers.set("X-Device-Id", getDeviceId());
+  }
   if (init?.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
@@ -65,7 +68,6 @@ export function getServerStatus(): Promise<ServerStatusResponse> {
 export function startJob(payload: JobCreateRequest): Promise<JobStatusResponse> {
   return apiFetch<JobStatusResponse>("/jobs", {
     method: "POST",
-    headers: deviceHeaders(),
     body: JSON.stringify(payload)
   });
 }
@@ -75,9 +77,7 @@ export function getJob(jobId: string): Promise<JobStatusResponse> {
 }
 
 export function getAvailableJobs(): Promise<JobStatusResponse[]> {
-  return apiFetch<JobStatusResponse[]>("/jobs/available", {
-    headers: deviceHeaders()
-  });
+  return apiFetch<JobStatusResponse[]>("/jobs/available");
 }
 
 export async function cancelJob(jobId: string): Promise<JobStatusResponse> {
@@ -87,11 +87,11 @@ export async function cancelJob(jobId: string): Promise<JobStatusResponse> {
 }
 
 export function downloadUrl(jobId: string): string {
-  return apiUrl(`/jobs/${jobId}/download`);
+  return withDeviceId(apiUrl(`/jobs/${jobId}/download`));
 }
 
 export function adminFileDownloadUrl(path: string): string {
-  return apiUrl(path);
+  return withDeviceId(apiUrl(path));
 }
 
 export function adminLogin(password: string): Promise<AdminSessionResponse> {
@@ -125,20 +125,20 @@ export function deleteAdminJobTemp(token: string, jobId: string): Promise<AdminC
   );
 }
 
-export function blockAdminIp(token: string, ip: string): Promise<AdminBlockedIpsResponse> {
-  return apiFetch<AdminBlockedIpsResponse>(
-    "/admin/blocked-ips",
+export function blockAdminDevice(token: string, deviceId: string): Promise<AdminBlockedDevicesResponse> {
+  return apiFetch<AdminBlockedDevicesResponse>(
+    "/admin/blocked-devices",
     {
       method: "POST",
-      body: JSON.stringify({ ip })
+      body: JSON.stringify({ deviceId })
     },
     token
   );
 }
 
-export function unblockAdminIp(token: string, ip: string): Promise<AdminBlockedIpsResponse> {
-  return apiFetch<AdminBlockedIpsResponse>(
-    `/admin/blocked-ips/${encodeURIComponent(ip)}`,
+export function unblockAdminDevice(token: string, deviceId: string): Promise<AdminBlockedDevicesResponse> {
+  return apiFetch<AdminBlockedDevicesResponse>(
+    `/admin/blocked-devices/${encodeURIComponent(deviceId)}`,
     {
       method: "DELETE"
     },
@@ -153,6 +153,7 @@ export function jobEventsUrl(jobId: string): string | null {
 
   const url = new URL(apiUrl(`/jobs/${jobId}/events`), window.location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.searchParams.set("deviceId", getDeviceId());
   return url.toString();
 }
 
@@ -165,8 +166,10 @@ function apiUrl(path: string): string {
   return `${API_BASE}${normalizedPath}`;
 }
 
-function deviceHeaders(): HeadersInit {
-  return { "X-Device-Id": getDeviceId() };
+function withDeviceId(value: string): string {
+  const url = new URL(value, window.location.href);
+  url.searchParams.set("deviceId", getDeviceId());
+  return url.toString();
 }
 
 function getDeviceId(): string {

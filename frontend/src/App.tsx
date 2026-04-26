@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
@@ -60,7 +60,7 @@ import {
   ApiError,
   adminFileDownloadUrl,
   adminLogin,
-  blockAdminIp,
+  blockAdminDevice,
   cancelJob,
   cleanupAdminTempFiles,
   deleteAdminJobTemp,
@@ -72,15 +72,16 @@ import {
   jobEventsUrl,
   previewUrl,
   startJob,
-  unblockAdminIp
+  unblockAdminDevice
 } from "./api";
+import type { GridColDef } from "@mui/x-data-grid";
 import { LANGUAGE_STORAGE_KEY, isLanguage, languageOptions, translations } from "./i18n";
 import type { Language, Translation } from "./i18n";
 import type {
   AdminDashboardResponse,
   AdminFileResponse,
   AdminTransferResponse,
-  AdminVisitorResponse,
+  AdminDeviceResponse,
   JobStatusResponse,
   MediaKind,
   PreviewEntry,
@@ -99,6 +100,8 @@ const ADMIN_REFRESH_INTERVAL_MS = 3000;
 type ServerStatusState = "checking" | "online" | "degraded" | "offline";
 type AppView = "download" | "admin";
 type NoticeSeverity = "success" | "info" | "warning" | "error";
+
+const DataGrid = lazy(() => import("@mui/x-data-grid").then((module) => ({ default: module.DataGrid })));
 
 interface Notice {
   message: string;
@@ -367,7 +370,7 @@ function App() {
   }
 
   return (
-    <Box className="app-shell min-h-screen bg-[linear-gradient(180deg,#eff6ff_0%,#ffffff_28rem,#f8fbff_100%)]">
+    <Box className={`app-shell min-h-screen ${view === "admin" ? "admin-page-shell" : "bg-[linear-gradient(180deg,#eff6ff_0%,#ffffff_28rem,#f8fbff_100%)]"}`}>
       <Container maxWidth="lg" className="py-8 md:py-10">
         <Stack spacing={3}>
           <Header
@@ -717,7 +720,7 @@ function AdminPanel({
 }) {
   const queryClient = useQueryClient();
   const [password, setPassword] = useState("");
-  const [ipToBlock, setIpToBlock] = useState("");
+  const [deviceToBlock, setDeviceToBlock] = useState("");
 
   const loginMutation = useMutation({
     mutationFn: adminLogin,
@@ -770,17 +773,17 @@ function AdminPanel({
     onError: (error) => onNotice(errorMessage(error, t), "error")
   });
 
-  const blockIpMutation = useMutation({
-    mutationFn: (ip: string) => blockAdminIp(token!, ip),
+  const blockDeviceMutation = useMutation({
+    mutationFn: (deviceId: string) => blockAdminDevice(token!, deviceId),
     onSuccess: () => {
-      setIpToBlock("");
+      setDeviceToBlock("");
       void queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
     },
     onError: (error) => onNotice(errorMessage(error, t), "error")
   });
 
-  const unblockIpMutation = useMutation({
-    mutationFn: (ip: string) => unblockAdminIp(token!, ip),
+  const unblockDeviceMutation = useMutation({
+    mutationFn: (deviceId: string) => unblockAdminDevice(token!, deviceId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
     },
@@ -792,63 +795,72 @@ function AdminPanel({
     loginMutation.mutate(password);
   }
 
-  function submitBlockIp(event: React.FormEvent<HTMLFormElement>) {
+  function submitBlockDevice(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const trimmedIp = ipToBlock.trim();
-    if (!trimmedIp) {
-      onNotice(t.admin.enterIp, "warning");
+    const trimmedDevice = deviceToBlock.trim();
+    if (!trimmedDevice) {
+      onNotice(t.admin.enterDevice, "warning");
       return;
     }
-    blockIpMutation.mutate(trimmedIp);
+    blockDeviceMutation.mutate(trimmedDevice);
   }
 
   if (!token) {
     return (
-      <Paper variant="outlined" className="motion-card motion-delay-1 p-4 md:p-5">
-        <Stack component="form" onSubmit={submitLogin} spacing={2} className="max-w-md">
-          <Stack direction="row" spacing={1.25} alignItems="center">
-            <LockKeyhole size={22} className="text-blue-600" />
-            <Box>
-              <Typography variant="h6" fontWeight={800}>
-                {t.admin.title}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {t.admin.loginSubtitle}
-              </Typography>
-            </Box>
+      <Box className="admin-shell">
+        <Paper variant="outlined" className="tabler-card motion-card motion-delay-1 p-4 md:p-5">
+          <Stack component="form" onSubmit={submitLogin} spacing={2} className="max-w-md">
+            <Stack direction="row" spacing={1.25} alignItems="center">
+              <Box className="tabler-icon">
+                <LockKeyhole size={20} />
+              </Box>
+              <Box>
+                <Typography variant="h6" fontWeight={700}>
+                  {t.admin.title}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {t.admin.loginSubtitle}
+                </Typography>
+              </Box>
+            </Stack>
+            <TextField
+              label={t.admin.password}
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+              InputProps={{ startAdornment: <KeyRound size={18} className="mr-2 text-blue-500" /> }}
+            />
+            <Button
+              type="submit"
+              variant="contained"
+              startIcon={loginMutation.isPending ? <CircularProgress size={18} color="inherit" /> : <Shield size={18} />}
+              disabled={loginMutation.isPending || !password}
+              className="action-button"
+            >
+              {t.admin.signIn}
+            </Button>
           </Stack>
-          <TextField
-            label={t.admin.password}
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete="current-password"
-            InputProps={{ startAdornment: <KeyRound size={18} className="mr-2 text-blue-500" /> }}
-          />
-          <Button
-            type="submit"
-            variant="contained"
-            startIcon={loginMutation.isPending ? <CircularProgress size={18} color="inherit" /> : <Shield size={18} />}
-            disabled={loginMutation.isPending || !password}
-            className="action-button"
-          >
-            {t.admin.signIn}
-          </Button>
-        </Stack>
-      </Paper>
+        </Paper>
+      </Box>
     );
   }
 
   const dashboard = dashboardQuery.data;
 
   return (
-    <Stack spacing={3}>
-      <Paper variant="outlined" className="motion-card motion-delay-1 p-4 md:p-5">
+    <Stack spacing={2.5} className="admin-shell">
+      <Box className="tabler-page-header">
         <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} justifyContent="space-between" alignItems={{ xs: "stretch", md: "center" }}>
           <Stack direction="row" spacing={1.25} alignItems="center">
-            <Shield size={24} className="text-blue-600" />
+            <Box className="tabler-icon">
+              <Shield size={21} />
+            </Box>
             <Box>
-              <Typography variant="h6" fontWeight={800}>
+              <Typography variant="caption" className="tabler-kicker">
+                Overview
+              </Typography>
+              <Typography variant="h5" fontWeight={700}>
                 {t.admin.title}
               </Typography>
               <Typography variant="body2" color="text.secondary">
@@ -856,7 +868,7 @@ function AdminPanel({
               </Typography>
             </Box>
           </Stack>
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing={1} className="tabler-toolbar">
             <Button
               variant="outlined"
               color="inherit"
@@ -870,10 +882,10 @@ function AdminPanel({
             </Button>
           </Stack>
         </Stack>
-      </Paper>
+      </Box>
 
       {dashboardQuery.isPending && (
-        <Paper variant="outlined" className="motion-card p-4 md:p-5">
+        <Paper variant="outlined" className="tabler-card motion-card p-4 md:p-5">
           <Stack direction="row" spacing={1.5} alignItems="center">
             <CircularProgress size={20} />
             <Typography>{t.admin.loading}</Typography>
@@ -884,6 +896,7 @@ function AdminPanel({
       {dashboard && (
         <>
           <AdminStats dashboard={dashboard} t={t} />
+          <AdminVisuals dashboard={dashboard} t={t} />
           <AdminJobsPanel dashboard={dashboard} t={t} />
           <AdminFilesPanel
             dashboard={dashboard}
@@ -895,14 +908,14 @@ function AdminPanel({
           />
           <AdminTransfersPanel dashboard={dashboard} t={t} />
           <AdminVisitorsPanel
-            visitors={dashboard.visitors}
-            ipToBlock={ipToBlock}
-            blockingIp={blockIpMutation.isPending}
-            unblockingIp={unblockIpMutation.variables ?? null}
-            onIpChange={setIpToBlock}
-            onSubmitBlock={submitBlockIp}
-            onBlock={(ip) => blockIpMutation.mutate(ip)}
-            onUnblock={(ip) => unblockIpMutation.mutate(ip)}
+            devices={dashboard.devices}
+            deviceToBlock={deviceToBlock}
+            blockingDevice={blockDeviceMutation.isPending}
+            unblockingDevice={unblockDeviceMutation.variables ?? null}
+            onDeviceChange={setDeviceToBlock}
+            onSubmitBlock={submitBlockDevice}
+            onBlock={(deviceId) => blockDeviceMutation.mutate(deviceId)}
+            onUnblock={(deviceId) => unblockDeviceMutation.mutate(deviceId)}
             t={t}
           />
           <AdminEventsPanel dashboard={dashboard} t={t} />
@@ -919,22 +932,22 @@ function AdminStats({ dashboard, t }: { dashboard: AdminDashboardResponse; t: Tr
       <AdminStat icon={<UploadCloud size={20} />} label={t.admin.stats.activeUploads} value={String(dashboard.activeUploads.length)} />
       <AdminStat icon={<Database size={20} />} label={t.admin.stats.tempUsed} value={formatBytes(dashboard.disk.tempBytes)} />
       <AdminStat icon={<HardDrive size={20} />} label={t.admin.stats.diskFree} value={formatBytes(dashboard.disk.freeBytes)} detail={`${dashboard.disk.usagePercent}% ${t.admin.stats.used}`} />
-      <AdminStat icon={<UserRound size={20} />} label={t.admin.stats.visitors} value={String(dashboard.visitors.length)} />
-      <AdminStat icon={<Ban size={20} />} label={t.admin.stats.blockedIps} value={String(dashboard.blockedIps.length)} />
+      <AdminStat icon={<UserRound size={20} />} label={t.admin.stats.devices} value={String(dashboard.devices.length)} />
+      <AdminStat icon={<Ban size={20} />} label={t.admin.stats.blockedDevices} value={String(dashboard.blockedDevices.length)} />
     </Box>
   );
 }
 
 function AdminStat({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: string; detail?: string }) {
   return (
-    <Paper variant="outlined" className="motion-card admin-stat p-3">
-      <Stack direction="row" spacing={1.25} alignItems="center">
-        <Box className="grid h-9 w-9 shrink-0 place-items-center rounded bg-blue-50 text-blue-600">{icon}</Box>
+    <Paper variant="outlined" className="tabler-card motion-card admin-stat p-3">
+      <Stack direction="row" spacing={1.25} alignItems="center" className="h-full">
+        <Box className="tabler-icon">{icon}</Box>
         <Box className="min-w-0">
           <Typography variant="caption" color="text.secondary">
             {label}
           </Typography>
-          <Typography variant="subtitle1" fontWeight={800} className="break-words">
+          <Typography variant="subtitle1" fontWeight={700} className="break-words">
             {value}
           </Typography>
           {detail && (
@@ -948,12 +961,178 @@ function AdminStat({ icon, label, value, detail }: { icon: React.ReactNode; labe
   );
 }
 
+function AdminVisuals({ dashboard, t }: { dashboard: AdminDashboardResponse; t: Translation }) {
+  const jobs = useMemo(() => [...dashboard.currentJobs, ...dashboard.jobHistory], [dashboard.currentJobs, dashboard.jobHistory]);
+  const activePercent = dashboard.maxActiveJobs > 0 ? (dashboard.activeJobs / dashboard.maxActiveJobs) * 100 : 0;
+  const tempPercent = dashboard.disk.totalBytes > 0 ? (dashboard.disk.tempBytes / dashboard.disk.totalBytes) * 100 : 0;
+  const statusCounts = useMemo(() => countJobsByStatus(jobs), [jobs]);
+  const maxStatusCount = Math.max(...Object.values(statusCounts), 1);
+  const activityPoints = useMemo(() => buildActivityPoints(jobs), [jobs]);
+  const statusOrder: JobStatusResponse["status"][] = ["queued", "metadata", "downloading", "converting", "archiving", "ready", "failed", "cancelled"];
+
+  return (
+    <Box className="admin-visual-grid">
+      <Paper variant="outlined" className="tabler-card admin-visual-card p-4">
+        <Stack spacing={2}>
+          <Stack direction="row" justifyContent="space-between" spacing={2}>
+            <Box>
+              <Typography variant="subtitle2" fontWeight={700}>
+                {t.admin.visuals.diskUsage}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {formatBytes(dashboard.disk.totalBytes - dashboard.disk.freeBytes)} / {formatBytes(dashboard.disk.totalBytes)}
+              </Typography>
+            </Box>
+            <Typography variant="h5" fontWeight={700}>
+              {dashboard.disk.usagePercent}%
+            </Typography>
+          </Stack>
+          <LinearProgress variant="determinate" value={clampPercent(dashboard.disk.usagePercent)} className="tabler-progress tabler-progress-blue" />
+          <Stack spacing={0.75}>
+            <MetricRow label={t.admin.visuals.tempFiles} value={formatBytes(dashboard.disk.tempBytes)} percent={tempPercent} />
+            <MetricRow label={t.admin.stats.diskFree} value={formatBytes(dashboard.disk.freeBytes)} percent={100 - dashboard.disk.usagePercent} tone="green" />
+          </Stack>
+        </Stack>
+      </Paper>
+
+      <Paper variant="outlined" className="tabler-card admin-visual-card p-4">
+        <Stack spacing={2}>
+          <Stack direction="row" justifyContent="space-between" spacing={2}>
+            <Box>
+              <Typography variant="subtitle2" fontWeight={700}>
+                {t.admin.visuals.capacity}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {t.admin.visuals.activeOfMax(dashboard.activeJobs, dashboard.maxActiveJobs)}
+              </Typography>
+            </Box>
+            <Typography variant="h5" fontWeight={700}>
+              {Math.round(activePercent)}%
+            </Typography>
+          </Stack>
+          <LinearProgress variant="determinate" value={clampPercent(activePercent)} className="tabler-progress tabler-progress-amber" />
+          <Stack spacing={0.75}>
+            <MetricRow label={t.admin.stats.activeUploads} value={String(dashboard.activeUploads.length)} percent={dashboard.activeUploads.length > 0 ? 100 : 0} tone="blue" />
+            <MetricRow label={t.admin.stats.devices} value={String(dashboard.devices.length)} percent={Math.min(dashboard.devices.length * 10, 100)} tone="gray" />
+          </Stack>
+        </Stack>
+      </Paper>
+
+      <Paper variant="outlined" className="tabler-card admin-visual-card p-4">
+        <Stack spacing={1.5}>
+          <Box>
+            <Typography variant="subtitle2" fontWeight={700}>
+              {t.admin.visuals.jobStatus}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {t.admin.visuals.jobsTracked(jobs.length)}
+            </Typography>
+          </Box>
+          <Stack spacing={1}>
+            {statusOrder.map((status) => {
+              const count = statusCounts[status] ?? 0;
+              return (
+                <Stack key={status} spacing={0.5}>
+                  <Stack direction="row" justifyContent="space-between" spacing={1}>
+                    <Typography variant="caption" color="text.secondary">
+                      {statusLabel(status, t)}
+                    </Typography>
+                    <Typography variant="caption" fontWeight={700}>
+                      {count}
+                    </Typography>
+                  </Stack>
+                  <Box className="tabler-bar-track">
+                    <Box className={`tabler-bar-fill status-${status}`} style={{ width: `${(count / maxStatusCount) * 100}%` }} />
+                  </Box>
+                </Stack>
+              );
+            })}
+          </Stack>
+        </Stack>
+      </Paper>
+
+      <Paper variant="outlined" className="tabler-card admin-visual-card p-4">
+        <Stack spacing={1.5}>
+          <Box>
+            <Typography variant="subtitle2" fontWeight={700}>
+              {t.admin.visuals.recentActivity}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {t.admin.visuals.lastSevenDays}
+            </Typography>
+          </Box>
+          <Sparkline points={activityPoints.map((point) => point.count)} />
+          <Stack direction="row" justifyContent="space-between" className="tabler-sparkline-labels">
+            {activityPoints.map((point) => (
+              <Typography key={point.label} variant="caption" color="text.secondary">
+                {point.label}
+              </Typography>
+            ))}
+          </Stack>
+        </Stack>
+      </Paper>
+    </Box>
+  );
+}
+
+function MetricRow({
+  label,
+  value,
+  percent,
+  tone = "blue"
+}: {
+  label: string;
+  value: string;
+  percent: number;
+  tone?: "blue" | "green" | "amber" | "gray";
+}) {
+  return (
+    <Stack spacing={0.4}>
+      <Stack direction="row" justifyContent="space-between" spacing={1}>
+        <Typography variant="caption" color="text.secondary">
+          {label}
+        </Typography>
+        <Typography variant="caption" fontWeight={700}>
+          {value}
+        </Typography>
+      </Stack>
+      <Box className="tabler-mini-track">
+        <Box className={`tabler-mini-fill tone-${tone}`} style={{ width: `${clampPercent(percent)}%` }} />
+      </Box>
+    </Stack>
+  );
+}
+
+function Sparkline({ points }: { points: number[] }) {
+  const width = 260;
+  const height = 86;
+  const max = Math.max(...points, 1);
+  const step = points.length > 1 ? width / (points.length - 1) : width;
+  const coordinates = points.map((value, index) => {
+    const x = index * step;
+    const y = height - 10 - (value / max) * (height - 22);
+    return `${x},${y}`;
+  });
+  const area = `0,${height} ${coordinates.join(" ")} ${width},${height}`;
+
+  return (
+    <svg className="tabler-sparkline" viewBox={`0 0 ${width} ${height}`} role="img" aria-hidden="true">
+      <polyline points={area} className="tabler-sparkline-area" />
+      <polyline points={coordinates.join(" ")} className="tabler-sparkline-line" />
+      {coordinates.map((coordinate) => {
+        const [x, y] = coordinate.split(",");
+        return <circle key={coordinate} cx={x} cy={y} r="3" className="tabler-sparkline-dot" />;
+      })}
+    </svg>
+  );
+}
+
 function AdminJobsPanel({ dashboard, t }: { dashboard: AdminDashboardResponse; t: Translation }) {
   const currentRows = dashboard.currentJobs.slice(0, 20);
   const historyRows = dashboard.jobHistory.slice(0, 30);
 
   return (
-    <Paper variant="outlined" className="motion-card p-4 md:p-5">
+    <Paper variant="outlined" className="tabler-card motion-card p-4 md:p-5">
       <Stack spacing={2}>
         <PanelTitle icon={<History size={20} />} title={t.admin.jobs.title} subtitle={t.admin.jobs.subtitle} />
         <AdminJobTable title={t.admin.jobs.current} jobs={currentRows} emptyText={t.admin.empty.currentJobs} t={t} />
@@ -967,7 +1146,7 @@ function AdminJobsPanel({ dashboard, t }: { dashboard: AdminDashboardResponse; t
 function AdminJobTable({ title, jobs, emptyText, t }: { title: string; jobs: JobStatusResponse[]; emptyText: string; t: Translation }) {
   return (
     <Stack spacing={1}>
-      <Typography variant="subtitle2" fontWeight={800}>
+      <Typography variant="subtitle2" fontWeight={700}>
         {title}
       </Typography>
       {jobs.length === 0 ? (
@@ -975,7 +1154,7 @@ function AdminJobTable({ title, jobs, emptyText, t }: { title: string; jobs: Job
           {emptyText}
         </Typography>
       ) : (
-        <TableContainer className="rounded border border-blue-100">
+        <TableContainer className="tabler-table">
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -989,7 +1168,7 @@ function AdminJobTable({ title, jobs, emptyText, t }: { title: string; jobs: Job
               {jobs.map((job) => (
                 <TableRow key={`${title}-${job.jobId}`} hover className="animated-row">
                   <TableCell>
-                    <Typography variant="body2" fontWeight={800}>
+                    <Typography variant="body2" fontWeight={700}>
                       {shortId(job.jobId)}
                     </Typography>
                     <Typography variant="caption" color="text.secondary" className="line-clamp-2">
@@ -999,7 +1178,18 @@ function AdminJobTable({ title, jobs, emptyText, t }: { title: string; jobs: Job
                   <TableCell>
                     <Chip size="small" color={adminStatusColor(job.status)} variant="outlined" label={statusLabel(job.status, t)} />
                   </TableCell>
-                  <TableCell>{Math.round(job.progress)}%</TableCell>
+                  <TableCell>
+                    <Stack spacing={0.5} className="min-w-[120px]">
+                      <LinearProgress
+                        variant="determinate"
+                        value={clampPercent(job.progress)}
+                        className={`tabler-progress tabler-progress-status status-${job.status}`}
+                      />
+                      <Typography variant="caption" color="text.secondary">
+                        {Math.round(job.progress)}%
+                      </Typography>
+                    </Stack>
+                  </TableCell>
                   <TableCell>{formatDateTime(job.updatedAt)}</TableCell>
                 </TableRow>
               ))}
@@ -1027,7 +1217,7 @@ function AdminFilesPanel({
   t: Translation;
 }) {
   return (
-    <Paper variant="outlined" className="motion-card p-4 md:p-5">
+    <Paper variant="outlined" className="tabler-card motion-card p-4 md:p-5">
       <Stack spacing={2}>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1} justifyContent="space-between" alignItems={{ xs: "stretch", sm: "center" }}>
           <PanelTitle icon={<HardDrive size={20} />} title={t.admin.files.title} subtitle={dashboard.disk.tempRoot} />
@@ -1083,7 +1273,7 @@ function AdminFileTable({
 }) {
   return (
     <Stack spacing={1}>
-      <Typography variant="subtitle2" fontWeight={800}>
+      <Typography variant="subtitle2" fontWeight={700}>
         {title}
       </Typography>
       {files.length === 0 ? (
@@ -1091,7 +1281,7 @@ function AdminFileTable({
           {emptyText}
         </Typography>
       ) : (
-        <TableContainer className="rounded border border-blue-100">
+        <TableContainer className="tabler-table">
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -1105,7 +1295,7 @@ function AdminFileTable({
               {files.map((file) => (
                 <TableRow key={`${title}-${file.relativePath}`} hover className="animated-row">
                   <TableCell>
-                    <Typography variant="body2" fontWeight={800} className="break-words">
+                    <Typography variant="body2" fontWeight={700} className="break-words">
                       {file.name}
                     </Typography>
                     <Typography variant="caption" color="text.secondary" className="break-words">
@@ -1147,7 +1337,7 @@ function AdminFileTable({
 
 function AdminTransfersPanel({ dashboard, t }: { dashboard: AdminDashboardResponse; t: Translation }) {
   return (
-    <Paper variant="outlined" className="motion-card p-4 md:p-5">
+    <Paper variant="outlined" className="tabler-card motion-card p-4 md:p-5">
       <Stack spacing={2}>
         <PanelTitle icon={<UploadCloud size={20} />} title={t.admin.uploads.title} subtitle={t.admin.uploads.subtitle} />
         <AdminTransferTable title={t.admin.uploads.active} transfers={dashboard.activeUploads} emptyText={t.admin.empty.activeUploads} t={t} />
@@ -1161,7 +1351,7 @@ function AdminTransfersPanel({ dashboard, t }: { dashboard: AdminDashboardRespon
 function AdminTransferTable({ title, transfers, emptyText, t }: { title: string; transfers: AdminTransferResponse[]; emptyText: string; t: Translation }) {
   return (
     <Stack spacing={1}>
-      <Typography variant="subtitle2" fontWeight={800}>
+      <Typography variant="subtitle2" fontWeight={700}>
         {title}
       </Typography>
       {transfers.length === 0 ? (
@@ -1169,7 +1359,7 @@ function AdminTransferTable({ title, transfers, emptyText, t }: { title: string;
           {emptyText}
         </Typography>
       ) : (
-        <TableContainer className="rounded border border-blue-100">
+        <TableContainer className="tabler-table">
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -1183,7 +1373,7 @@ function AdminTransferTable({ title, transfers, emptyText, t }: { title: string;
               {transfers.map((transfer) => (
                 <TableRow key={transfer.transferId} hover className="animated-row">
                   <TableCell>
-                    <Typography variant="body2" fontWeight={800} className="break-words">
+                    <Typography variant="body2" fontWeight={700} className="break-words">
                       {transfer.fileName}
                     </Typography>
                     <Chip size="small" variant="outlined" label={transfer.status} />
@@ -1202,91 +1392,142 @@ function AdminTransferTable({ title, transfers, emptyText, t }: { title: string;
 }
 
 function AdminVisitorsPanel({
-  visitors,
-  ipToBlock,
-  blockingIp,
-  unblockingIp,
-  onIpChange,
+  devices,
+  deviceToBlock,
+  blockingDevice,
+  unblockingDevice,
+  onDeviceChange,
   onSubmitBlock,
   onBlock,
   onUnblock,
   t
 }: {
-  visitors: AdminVisitorResponse[];
-  ipToBlock: string;
-  blockingIp: boolean;
-  unblockingIp: string | null;
-  onIpChange: (value: string) => void;
+  devices: AdminDeviceResponse[];
+  deviceToBlock: string;
+  blockingDevice: boolean;
+  unblockingDevice: string | null;
+  onDeviceChange: (value: string) => void;
   onSubmitBlock: (event: React.FormEvent<HTMLFormElement>) => void;
-  onBlock: (ip: string) => void;
-  onUnblock: (ip: string) => void;
+  onBlock: (deviceId: string) => void;
+  onUnblock: (deviceId: string) => void;
   t: Translation;
 }) {
+  const columns = useMemo<GridColDef[]>(
+    () => [
+      {
+        field: "deviceId",
+        headerName: t.admin.visitors.device,
+        flex: 1.2,
+        minWidth: 260,
+        renderCell: (params) => (
+          <Stack spacing={0.25} className="min-w-0 py-1.5">
+            <Stack direction="row" spacing={1} alignItems="center" className="min-w-0" flexWrap="wrap">
+              <Typography variant="body2" fontWeight={700} className="break-all">
+                {params.row.deviceId}
+              </Typography>
+              {params.row.blocked && <Chip size="small" color="error" variant="outlined" label={t.admin.visitors.blocked} />}
+            </Stack>
+            <Typography variant="caption" color="text.secondary" className="line-clamp-2">
+              {params.row.userAgent || "-"}
+            </Typography>
+          </Stack>
+        )
+      },
+      {
+        field: "lastIp",
+        headerName: t.admin.visitors.lastIp,
+        width: 150
+      },
+      {
+        field: "lastSeen",
+        headerName: t.admin.visitors.lastSeen,
+        width: 160,
+        valueFormatter: (value) => formatDateTime(String(value))
+      },
+      {
+        field: "requestCount",
+        headerName: t.admin.visitors.requests,
+        width: 110,
+        type: "number"
+      },
+      {
+        field: "lastPath",
+        headerName: t.admin.visitors.lastPath,
+        flex: 0.9,
+        minWidth: 180,
+        renderCell: (params) => (
+          <Typography variant="caption" className="break-words">
+            {params.row.lastPath || "-"}
+          </Typography>
+        )
+      },
+      {
+        field: "actions",
+        headerName: t.admin.files.actions,
+        width: 140,
+        sortable: false,
+        filterable: false,
+        align: "right",
+        headerAlign: "right",
+        renderCell: (params) =>
+          params.row.blocked ? (
+            <Button
+              size="small"
+              color="inherit"
+              variant="outlined"
+              onClick={() => onUnblock(params.row.deviceId)}
+              disabled={unblockingDevice === params.row.deviceId}
+            >
+              {t.admin.visitors.unblock}
+            </Button>
+          ) : (
+            <Button size="small" color="error" variant="outlined" onClick={() => onBlock(params.row.deviceId)}>
+              {t.admin.visitors.block}
+            </Button>
+          )
+      }
+    ],
+    [onBlock, onUnblock, t, unblockingDevice]
+  );
+
   return (
-    <Paper variant="outlined" className="motion-card p-4 md:p-5">
+    <Paper variant="outlined" className="tabler-card motion-card p-4 md:p-5">
       <Stack spacing={2}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} justifyContent="space-between" alignItems={{ xs: "stretch", md: "center" }}>
           <PanelTitle icon={<UserRound size={20} />} title={t.admin.visitors.title} subtitle={t.admin.visitors.subtitle} />
           <Stack component="form" onSubmit={onSubmitBlock} direction={{ xs: "column", sm: "row" }} spacing={1}>
-            <TextField size="small" label={t.admin.visitors.ip} value={ipToBlock} onChange={(event) => onIpChange(event.target.value)} />
-            <Button type="submit" color="error" variant="outlined" disabled={blockingIp} startIcon={blockingIp ? <CircularProgress size={16} /> : <Ban size={16} />}>
+            <TextField size="small" label={t.admin.visitors.device} value={deviceToBlock} onChange={(event) => onDeviceChange(event.target.value)} />
+            <Button type="submit" color="error" variant="outlined" disabled={blockingDevice} startIcon={blockingDevice ? <CircularProgress size={16} /> : <Ban size={16} />}>
               {t.admin.visitors.block}
             </Button>
           </Stack>
         </Stack>
-        {visitors.length === 0 ? (
+        {devices.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             {t.admin.empty.visitors}
           </Typography>
         ) : (
-          <TableContainer className="rounded border border-blue-100">
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>{t.admin.visitors.ip}</TableCell>
-                  <TableCell>{t.admin.visitors.lastSeen}</TableCell>
-                  <TableCell>{t.admin.visitors.requests}</TableCell>
-                  <TableCell>{t.admin.visitors.lastPath}</TableCell>
-                  <TableCell align="right">{t.admin.files.actions}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {visitors.map((visitor) => (
-                  <TableRow key={visitor.ip} hover className="animated-row">
-                    <TableCell>
-                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                        <Typography variant="body2" fontWeight={800}>
-                          {visitor.ip}
-                        </Typography>
-                        {visitor.blocked && <Chip size="small" color="error" variant="outlined" label={t.admin.visitors.blocked} />}
-                      </Stack>
-                      <Typography variant="caption" color="text.secondary" className="line-clamp-2">
-                        {visitor.userAgent || "-"}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>{formatDateTime(visitor.lastSeen)}</TableCell>
-                    <TableCell>{visitor.requestCount}</TableCell>
-                    <TableCell>
-                      <Typography variant="caption" className="break-words">
-                        {visitor.lastPath || "-"}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right">
-                      {visitor.blocked ? (
-                        <Button size="small" color="inherit" variant="outlined" onClick={() => onUnblock(visitor.ip)} disabled={unblockingIp === visitor.ip}>
-                          {t.admin.visitors.unblock}
-                        </Button>
-                      ) : (
-                        <Button size="small" color="error" variant="outlined" onClick={() => onBlock(visitor.ip)}>
-                          {t.admin.visitors.block}
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+          <Box className="admin-grid-shell">
+            <Suspense
+              fallback={
+                <Stack direction="row" spacing={1.5} alignItems="center" className="p-3">
+                  <CircularProgress size={18} />
+                  <Typography variant="body2">{t.admin.loading}</Typography>
+                </Stack>
+              }
+            >
+              <DataGrid
+                rows={devices}
+                columns={columns}
+                getRowId={(row) => row.deviceId}
+                autoHeight
+                disableRowSelectionOnClick
+                pageSizeOptions={[5, 10, 25]}
+                initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+                getRowHeight={() => "auto"}
+              />
+            </Suspense>
+          </Box>
         )}
       </Stack>
     </Paper>
@@ -1295,7 +1536,7 @@ function AdminVisitorsPanel({
 
 function AdminEventsPanel({ dashboard, t }: { dashboard: AdminDashboardResponse; t: Translation }) {
   return (
-    <Paper variant="outlined" className="motion-card p-4 md:p-5">
+    <Paper variant="outlined" className="tabler-card motion-card p-4 md:p-5">
       <Stack spacing={2}>
         <PanelTitle icon={<Activity size={20} />} title={t.admin.events.title} subtitle={t.admin.events.subtitle} />
         {dashboard.events.length === 0 ? (
@@ -1303,7 +1544,7 @@ function AdminEventsPanel({ dashboard, t }: { dashboard: AdminDashboardResponse;
             {t.admin.empty.events}
           </Typography>
         ) : (
-          <TableContainer className="rounded border border-blue-100">
+          <TableContainer className="tabler-table">
             <Table size="small">
               <TableHead>
                 <TableRow>
@@ -1342,10 +1583,10 @@ function AdminEventsPanel({ dashboard, t }: { dashboard: AdminDashboardResponse;
 
 function PanelTitle({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle?: string }) {
   return (
-    <Stack direction="row" spacing={1.25} alignItems="center" className="min-w-0">
-      <Box className="grid h-9 w-9 shrink-0 place-items-center rounded bg-blue-50 text-blue-600">{icon}</Box>
+    <Stack direction="row" spacing={1.25} alignItems="center" className="tabler-card-title min-w-0">
+      <Box className="tabler-icon">{icon}</Box>
       <Box className="min-w-0">
-        <Typography variant="h6" fontWeight={800}>
+        <Typography variant="h6" fontWeight={700}>
           {title}
         </Typography>
         {subtitle && (
@@ -1801,6 +2042,58 @@ function downloadQualityLabel(job: JobStatusResponse, t: Translation): string {
     return job.quality;
   }
   return job.mediaKind === "mp3" ? "320k" : t.downloads.highestAvailable;
+}
+
+function countJobsByStatus(jobs: JobStatusResponse[]): Record<JobStatusResponse["status"], number> {
+  return jobs.reduce(
+    (counts, job) => {
+      counts[job.status] += 1;
+      return counts;
+    },
+    {
+      queued: 0,
+      metadata: 0,
+      downloading: 0,
+      converting: 0,
+      archiving: 0,
+      ready: 0,
+      failed: 0,
+      cancelled: 0
+    } satisfies Record<JobStatusResponse["status"], number>
+  );
+}
+
+function buildActivityPoints(jobs: JobStatusResponse[]): Array<{ label: string; count: number }> {
+  const formatter = new Intl.DateTimeFormat("en-GB", { weekday: "short" });
+  const today = new Date();
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(today);
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() - (6 - index));
+    return {
+      key: date.toISOString().slice(0, 10),
+      label: formatter.format(date),
+      count: 0
+    };
+  });
+  const byKey = new Map(days.map((day) => [day.key, day]));
+
+  for (const job of jobs) {
+    const key = new Date(job.updatedAt).toISOString().slice(0, 10);
+    const point = byKey.get(key);
+    if (point) {
+      point.count += 1;
+    }
+  }
+
+  return days;
+}
+
+function clampPercent(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.min(Math.max(value, 0), 100);
 }
 
 function formatBytes(bytes: number): string {

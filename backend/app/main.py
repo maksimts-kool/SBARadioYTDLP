@@ -22,10 +22,10 @@ from starlette.background import BackgroundTask
 
 from .admin import (
     ACTIVE_JOB_STATES,
-    AdminBlockedIpsResponse,
+    AdminBlockedDevicesResponse,
     AdminCleanupResponse,
     AdminDashboardResponse,
-    AdminIpBlockRequest,
+    AdminDeviceBlockRequest,
     AdminLoginRequest,
     AdminSessionResponse,
     AdminState,
@@ -75,10 +75,11 @@ app.add_middleware(
 @app.middleware("http")
 async def request_tracking_middleware(request: Request, call_next):
     ip = client_ip(request)
-    admin_state.record_request(ip, request.headers.get("user-agent", ""), request.url.path)
+    device_id = connection_device_id(request)
+    admin_state.record_device(device_id, ip, request.headers.get("user-agent", ""), request.url.path)
 
-    if admin_state.is_blocked(ip):
-        return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": "Your IP is blocked."})
+    if admin_state.is_device_blocked(device_id):
+        return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": "Your device is blocked."})
 
     return await call_next(request)
 
@@ -176,8 +177,9 @@ def get_job(job_id: str) -> JobStatusResponse:
 @app.websocket("/api/jobs/{job_id}/events")
 async def job_events(websocket: WebSocket, job_id: str) -> None:
     ip = client_ip(websocket)
-    admin_state.record_request(ip, websocket.headers.get("user-agent", ""), websocket.url.path)
-    if admin_state.is_blocked(ip):
+    device_id = connection_device_id(websocket)
+    admin_state.record_device(device_id, ip, websocket.headers.get("user-agent", ""), websocket.url.path)
+    if admin_state.is_device_blocked(device_id):
         await websocket.close(code=1008)
         return
 
@@ -258,14 +260,14 @@ def admin_summary(_: None = Depends(require_admin)) -> AdminDashboardResponse:
     return build_admin_dashboard()
 
 
-@app.post("/api/admin/blocked-ips", response_model=AdminBlockedIpsResponse)
-def block_ip(payload: AdminIpBlockRequest, request: Request, _: None = Depends(require_admin)) -> AdminBlockedIpsResponse:
-    return admin_state.block_ip(payload.ip.strip(), admin_ip=client_ip(request))
+@app.post("/api/admin/blocked-devices", response_model=AdminBlockedDevicesResponse)
+def block_device(payload: AdminDeviceBlockRequest, request: Request, _: None = Depends(require_admin)) -> AdminBlockedDevicesResponse:
+    return admin_state.block_device(payload.deviceId.strip(), admin_ip=client_ip(request))
 
 
-@app.delete("/api/admin/blocked-ips/{ip}", response_model=AdminBlockedIpsResponse)
-def unblock_ip(ip: str, request: Request, _: None = Depends(require_admin)) -> AdminBlockedIpsResponse:
-    return admin_state.unblock_ip(ip.strip(), admin_ip=client_ip(request))
+@app.delete("/api/admin/blocked-devices/{device_id}", response_model=AdminBlockedDevicesResponse)
+def unblock_device(device_id: str, request: Request, _: None = Depends(require_admin)) -> AdminBlockedDevicesResponse:
+    return admin_state.unblock_device(device_id.strip(), admin_ip=client_ip(request))
 
 
 @app.post("/api/admin/temp/cleanup", response_model=AdminCleanupResponse)
@@ -337,8 +339,8 @@ def build_admin_dashboard() -> AdminDashboardResponse:
         jobHistory=job_history,
         availableFiles=available_files,
         tempFiles=temp_files,
-        visitors=admin_state.visitors(),
-        blockedIps=admin_state.blocked_ips(),
+        devices=admin_state.devices(),
+        blockedDevices=admin_state.blocked_devices(),
         activeUploads=admin_state.active_uploads(),
         uploadHistory=admin_state.upload_history(),
         events=admin_state.events(),
@@ -374,6 +376,13 @@ def clean_device_id(value: str | None) -> str | None:
     if not cleaned or len(cleaned) > 128:
         return None
     return cleaned
+
+
+def connection_device_id(connection: Request | WebSocket) -> str | None:
+    header_value = connection.headers.get("x-device-id")
+    if header_value:
+        return clean_device_id(header_value)
+    return clean_device_id(connection.query_params.get("deviceId"))
 
 
 def clean_media_title(value: str | None) -> str | None:

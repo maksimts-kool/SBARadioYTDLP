@@ -28,12 +28,12 @@ class AdminSessionResponse(BaseModel):
     expiresAt: datetime
 
 
-class AdminIpBlockRequest(BaseModel):
-    ip: str = Field(min_length=1, max_length=128)
+class AdminDeviceBlockRequest(BaseModel):
+    deviceId: str = Field(min_length=1, max_length=128)
 
 
-class AdminBlockedIpsResponse(BaseModel):
-    blockedIps: list[str]
+class AdminBlockedDevicesResponse(BaseModel):
+    blockedDevices: list[str]
 
 
 class AdminCleanupResponse(BaseModel):
@@ -64,8 +64,9 @@ class AdminFileResponse(BaseModel):
     deletable: bool = True
 
 
-class AdminVisitorResponse(BaseModel):
-    ip: str
+class AdminDeviceResponse(BaseModel):
+    deviceId: str
+    lastIp: str
     firstSeen: datetime
     lastSeen: datetime
     requestCount: int
@@ -105,25 +106,27 @@ class AdminDashboardResponse(BaseModel):
     jobHistory: list[JobStatusResponse]
     availableFiles: list[AdminFileResponse]
     tempFiles: list[AdminFileResponse]
-    visitors: list[AdminVisitorResponse]
-    blockedIps: list[str]
+    devices: list[AdminDeviceResponse]
+    blockedDevices: list[str]
     activeUploads: list[AdminTransferResponse]
     uploadHistory: list[AdminTransferResponse]
     events: list[AdminEventResponse]
 
 
 @dataclass
-class VisitorRecord:
-    ip: str
+class DeviceRecord:
+    device_id: str
+    last_ip: str
     first_seen: datetime
     last_seen: datetime
     request_count: int = 0
     last_path: str = ""
     user_agent: str = ""
 
-    def to_response(self, blocked: bool) -> AdminVisitorResponse:
-        return AdminVisitorResponse(
-            ip=self.ip,
+    def to_response(self, blocked: bool) -> AdminDeviceResponse:
+        return AdminDeviceResponse(
+            deviceId=self.device_id,
+            lastIp=self.last_ip,
             firstSeen=self.first_seen,
             lastSeen=self.last_seen,
             requestCount=self.request_count,
@@ -182,8 +185,8 @@ class AdminState:
         self.state_path = state_path
         self.max_events = max_events
         self._lock = threading.RLock()
-        self._visitors: dict[str, VisitorRecord] = {}
-        self._blocked_ips: set[str] = set()
+        self._devices: dict[str, DeviceRecord] = {}
+        self._blocked_devices: set[str] = set()
         self._sessions: dict[str, datetime] = {}
         self._active_transfers: dict[str, TransferRecord] = {}
         self._transfer_history: list[TransferRecord] = []
@@ -210,55 +213,58 @@ class AdminState:
             expires_at = self._sessions.get(token)
             return bool(expires_at and expires_at > now)
 
-    def record_request(self, ip: str, user_agent: str, path: str) -> None:
-        if not ip:
+    def record_device(self, device_id: str | None, ip: str, user_agent: str, path: str) -> None:
+        if not device_id:
             return
 
         now = utc_now()
         should_save = False
         with self._lock:
-            visitor = self._visitors.get(ip)
-            if visitor is None:
-                visitor = VisitorRecord(ip=ip, first_seen=now, last_seen=now)
-                self._visitors[ip] = visitor
+            device = self._devices.get(device_id)
+            if device is None:
+                device = DeviceRecord(device_id=device_id, last_ip=ip, first_seen=now, last_seen=now)
+                self._devices[device_id] = device
                 should_save = True
 
-            visitor.last_seen = now
-            visitor.request_count += 1
-            visitor.last_path = path[:512]
-            visitor.user_agent = user_agent[:512]
-            should_save = should_save or visitor.request_count % 10 == 0
+            device.last_ip = ip
+            device.last_seen = now
+            device.request_count += 1
+            device.last_path = path[:512]
+            device.user_agent = user_agent[:512]
+            should_save = should_save or device.request_count % 10 == 0
 
             if should_save:
                 self._save_locked()
 
-    def is_blocked(self, ip: str) -> bool:
+    def is_device_blocked(self, device_id: str | None) -> bool:
+        if not device_id:
+            return False
         with self._lock:
-            return ip in self._blocked_ips
+            return device_id in self._blocked_devices
 
-    def block_ip(self, ip: str, admin_ip: str | None = None) -> AdminBlockedIpsResponse:
+    def block_device(self, device_id: str, admin_ip: str | None = None) -> AdminBlockedDevicesResponse:
         with self._lock:
-            self._blocked_ips.add(ip)
-            self._add_event_locked("security", f"Blocked IP {ip}", ip=admin_ip)
+            self._blocked_devices.add(device_id)
+            self._add_event_locked("security", f"Blocked device {device_id}", ip=admin_ip)
             self._save_locked()
-            return AdminBlockedIpsResponse(blockedIps=sorted(self._blocked_ips))
+            return AdminBlockedDevicesResponse(blockedDevices=sorted(self._blocked_devices))
 
-    def unblock_ip(self, ip: str, admin_ip: str | None = None) -> AdminBlockedIpsResponse:
+    def unblock_device(self, device_id: str, admin_ip: str | None = None) -> AdminBlockedDevicesResponse:
         with self._lock:
-            self._blocked_ips.discard(ip)
-            self._add_event_locked("security", f"Unblocked IP {ip}", ip=admin_ip)
+            self._blocked_devices.discard(device_id)
+            self._add_event_locked("security", f"Unblocked device {device_id}", ip=admin_ip)
             self._save_locked()
-            return AdminBlockedIpsResponse(blockedIps=sorted(self._blocked_ips))
+            return AdminBlockedDevicesResponse(blockedDevices=sorted(self._blocked_devices))
 
-    def blocked_ips(self) -> list[str]:
+    def blocked_devices(self) -> list[str]:
         with self._lock:
-            return sorted(self._blocked_ips)
+            return sorted(self._blocked_devices)
 
-    def visitors(self) -> list[AdminVisitorResponse]:
+    def devices(self) -> list[AdminDeviceResponse]:
         with self._lock:
             return sorted(
-                [visitor.to_response(visitor.ip in self._blocked_ips) for visitor in self._visitors.values()],
-                key=lambda visitor: visitor.lastSeen,
+                [device.to_response(device.device_id in self._blocked_devices) for device in self._devices.values()],
+                key=lambda device: device.lastSeen,
                 reverse=True,
             )
 
@@ -338,12 +344,13 @@ class AdminState:
             return
 
         with self._lock:
-            self._blocked_ips = set(payload.get("blockedIps") or [])
-            self._visitors = {}
-            for raw in payload.get("visitors") or []:
+            self._blocked_devices = set(payload.get("blockedDevices") or [])
+            self._devices = {}
+            for raw in payload.get("devices") or []:
                 try:
-                    visitor = VisitorRecord(
-                        ip=str(raw["ip"]),
+                    device = DeviceRecord(
+                        device_id=str(raw["deviceId"]),
+                        last_ip=str(raw.get("lastIp") or ""),
                         first_seen=parse_datetime(raw["firstSeen"]),
                         last_seen=parse_datetime(raw["lastSeen"]),
                         request_count=int(raw.get("requestCount") or 0),
@@ -352,7 +359,7 @@ class AdminState:
                     )
                 except (KeyError, TypeError, ValueError):
                     continue
-                self._visitors[visitor.ip] = visitor
+                self._devices[device.device_id] = device
 
             self._transfer_history = []
             for raw in payload.get("uploadHistory") or []:
@@ -392,17 +399,18 @@ class AdminState:
 
     def _save_locked(self) -> None:
         payload = {
-            "blockedIps": sorted(self._blocked_ips),
-            "visitors": [
+            "blockedDevices": sorted(self._blocked_devices),
+            "devices": [
                 {
-                    "ip": visitor.ip,
-                    "firstSeen": visitor.first_seen.isoformat(),
-                    "lastSeen": visitor.last_seen.isoformat(),
-                    "requestCount": visitor.request_count,
-                    "lastPath": visitor.last_path,
-                    "userAgent": visitor.user_agent,
+                    "deviceId": device.device_id,
+                    "lastIp": device.last_ip,
+                    "firstSeen": device.first_seen.isoformat(),
+                    "lastSeen": device.last_seen.isoformat(),
+                    "requestCount": device.request_count,
+                    "lastPath": device.last_path,
+                    "userAgent": device.user_agent,
                 }
-                for visitor in sorted(self._visitors.values(), key=lambda item: item.last_seen, reverse=True)
+                for device in sorted(self._devices.values(), key=lambda item: item.last_seen, reverse=True)
             ],
             "uploadHistory": [transfer.to_response().model_dump(mode="json") for transfer in self._transfer_history],
             "events": [event.to_response().model_dump(mode="json") for event in self._events],

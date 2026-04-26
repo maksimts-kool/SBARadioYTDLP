@@ -99,8 +99,9 @@ export interface AdminFileResponse {
   deletable: boolean;
 }
 
-export interface AdminVisitorResponse {
-  ip: string;
+export interface AdminDeviceResponse {
+  deviceId: string;
+  lastIp: string;
   firstSeen: string;
   lastSeen: string;
   requestCount: number;
@@ -140,8 +141,8 @@ export interface AdminDashboardResponse {
   jobHistory: JobStatusResponse[];
   availableFiles: AdminFileResponse[];
   tempFiles: AdminFileResponse[];
-  visitors: AdminVisitorResponse[];
-  blockedIps: string[];
+  devices: AdminDeviceResponse[];
+  blockedDevices: string[];
   activeUploads: AdminTransferResponse[];
   uploadHistory: AdminTransferResponse[];
   events: AdminEventResponse[];
@@ -153,6 +154,6 @@ export interface AdminCleanupResponse {
   removedBytes: number;
 }
 
-export interface AdminBlockedIpsResponse {
-  blockedIps: string[];
+export interface AdminBlockedDevicesResponse {
+  blockedDevices: string[];
 }
