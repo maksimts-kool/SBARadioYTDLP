@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     ytdlp_cookies_from_browser: str = ""
     redis_url: str = ""
     redis_healthcheck_timeout_seconds: float = 1.0
+    redis_namespace: str = "sbaradio-ytdlp"
+    redis_job_lock_ttl_seconds: int = 6 * 60 * 60
     admin_password: str = "admin"
     admin_session_ttl_seconds: int = 12 * 60 * 60
     admin_state_file: str = ""

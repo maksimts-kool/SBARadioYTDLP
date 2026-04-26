@@ -57,6 +57,9 @@ Useful settings:
 - `APP_CLEANUP_AFTER_SECONDS`: how long completed temp files stay available.
 - `APP_YTDLP_COOKIE_FILE`: path inside the backend container to an exported Netscape cookies file.
 - `APP_YTDLP_COOKIES_FROM_BROWSER`: optional `yt-dlp` browser cookie spec, such as `firefox` or `chrome:Default`.
+- `APP_REDIS_URL`: optional Redis URL. When set, Redis is used for shared active-download capacity and admin job history snapshots.
+- `APP_REDIS_NAMESPACE`: Redis key prefix for this deployment.
+- `APP_REDIS_JOB_LOCK_TTL_SECONDS`: expiry for active job reservations. Keep it longer than the maximum expected job runtime.
 - `APP_ADMIN_PASSWORD`: password for the admin panel. The local Docker default is `admin`; change it before exposing the backend.
 - `APP_ADMIN_SESSION_TTL_SECONDS`: how long an admin login token remains valid.
 - `YTDLP_COOKIE_FILE_HOST_PATH`: host path to mount as `/cookies/youtube.txt` in Portainer deployments.
@@ -151,7 +154,9 @@ APP_YTDLP_COOKIE_FILE=/cookies/youtube.txt
 YTDLP_COOKIE_FILE_HOST_PATH=/opt/sbaradio-ytdlp/youtube.txt
 ```
 
-The backend-only Portainer stack includes Redis. On the server running Docker, enable memory overcommit so Redis background saves do not fail:
+The backend-only Portainer stack includes Redis. The backend uses it to reserve active download slots across backend instances and to persist job history snapshots for the admin dashboard. If Redis is configured and unreachable, readiness fails and new download creation returns a service-unavailable error instead of silently bypassing shared capacity.
+
+On the server running Docker, enable memory overcommit so Redis background saves do not fail:
 
 ```bash
 sudo sysctl vm.overcommit_memory=1

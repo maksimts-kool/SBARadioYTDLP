@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from .models import JobState, JobStatusResponse, MediaKind, utc_now
+from .redis_store import OptionalRedisJobStore
 
 
 @dataclass
@@ -59,14 +60,22 @@ class Job:
 
 
 class JobManager:
-    def __init__(self, temp_root: Path, max_active_jobs: int, history_limit: int = 200) -> None:
+    def __init__(
+        self,
+        temp_root: Path,
+        max_active_jobs: int,
+        history_limit: int = 200,
+        redis_store: OptionalRedisJobStore = None,
+    ) -> None:
         self.temp_root = temp_root
         self.max_active_jobs = max_active_jobs
         self.history_limit = history_limit
+        self.redis_store = redis_store
         self._jobs: Dict[str, Job] = {}
         self._history: Dict[str, JobStatusResponse] = {}
         self._history_order: list[str] = []
         self._lock = threading.RLock()
+        self._load_history_from_redis()
 
     def create(
         self,
@@ -77,11 +86,18 @@ class JobManager:
         media_title: str | None = None,
         device_id: str | None = None,
     ) -> Job:
+        job_id = uuid.uuid4().hex
         with self._lock:
             if self.active_count() >= self.max_active_jobs:
                 raise RuntimeError("Another download is already running.")
+            try:
+                if self.redis_store and not self.redis_store.reserve_active_slot(job_id, self.max_active_jobs):
+                    raise RuntimeError("Another download is already running.")
+            except RuntimeError:
+                raise
+            except Exception as exc:
+                raise RuntimeError(f"Redis is not reachable: {exc}") from exc
 
-            job_id = uuid.uuid4().hex
             job = Job(
                 id=job_id,
                 url=url,
@@ -116,6 +132,7 @@ class JobManager:
                 setattr(job, key, value)
             job.updated_at = utc_now()
             self._remember(job)
+            self._sync_active_slot(job)
 
     def cancel(self, job_id: str) -> Optional[Job]:
         job = self.get(job_id)
@@ -130,6 +147,7 @@ class JobManager:
             job = self._jobs.pop(job_id, None)
             if job is not None:
                 self._remember(job)
+                self._release_active_slot(job.id)
             return job
 
     def all(self) -> list[Job]:
@@ -141,10 +159,51 @@ class JobManager:
             return sorted(self._history.values(), key=lambda snapshot: snapshot.updatedAt, reverse=True)
 
     def _remember(self, job: Job) -> None:
+        snapshot = job.to_response()
         if job.id not in self._history:
             self._history_order.append(job.id)
-        self._history[job.id] = job.to_response()
+        self._history[job.id] = snapshot
 
         while len(self._history_order) > self.history_limit:
             oldest_id = self._history_order.pop(0)
             self._history.pop(oldest_id, None)
+
+        if self.redis_store:
+            try:
+                self.redis_store.remember_job(snapshot, self.history_limit)
+            except Exception:
+                return
+
+    def _load_history_from_redis(self) -> None:
+        if not self.redis_store:
+            return
+
+        try:
+            snapshots = self.redis_store.load_history(self.history_limit)
+        except Exception:
+            return
+
+        for snapshot in reversed(snapshots):
+            if snapshot.jobId not in self._history:
+                self._history_order.append(snapshot.jobId)
+            self._history[snapshot.jobId] = snapshot
+
+    def _sync_active_slot(self, job: Job) -> None:
+        if not self.redis_store:
+            return
+
+        active_states = {JobState.queued, JobState.metadata, JobState.downloading, JobState.converting, JobState.archiving}
+        try:
+            if job.status in active_states:
+                self.redis_store.refresh_active_slot(job.id)
+                return
+            self.redis_store.release_active_slot(job.id)
+        except Exception:
+            return
+
+    def _release_active_slot(self, job_id: str) -> None:
+        if self.redis_store:
+            try:
+                self.redis_store.release_active_slot(job_id)
+            except Exception:
+                return

@@ -37,11 +37,18 @@ from .config import get_settings
 from .downloader import extract_preview, run_download_job
 from .jobs import JobManager
 from .models import JobCreateRequest, JobState, JobStatusResponse, PreviewRequest, PreviewResponse, utc_now
+from .redis_store import RedisJobStore
 from .storage import ensure_directory, remove_directory
 from .validation import enforce_playlist_limit, validate_quality, validate_youtube_url
 
 settings = get_settings()
-manager = JobManager(settings.temp_root, settings.max_active_jobs, settings.admin_history_limit)
+redis_job_store = RedisJobStore(
+    settings.redis_connection_url,
+    namespace=settings.redis_namespace,
+    lock_ttl_seconds=settings.redis_job_lock_ttl_seconds,
+    socket_timeout_seconds=settings.redis_healthcheck_timeout_seconds,
+)
+manager = JobManager(settings.temp_root, settings.max_active_jobs, settings.admin_history_limit, redis_job_store if redis_job_store.enabled else None)
 admin_state = AdminState(settings.admin_state_path, settings.admin_history_limit)
 started_at = utc_now()
 
@@ -142,6 +149,8 @@ def create_job(
             device_id=clean_device_id(x_device_id),
         )
     except RuntimeError as exc:
+        if str(exc).startswith("Redis is not reachable:"):
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc)) from exc
 
     background_tasks.add_task(run_download_job, job, manager, settings)
