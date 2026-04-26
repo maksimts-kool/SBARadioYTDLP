@@ -10,6 +10,7 @@ import {
   Divider,
   FormControl,
   FormControlLabel,
+  InputLabel,
   FormLabel,
   LinearProgress,
   MenuItem,
@@ -34,6 +35,7 @@ import {
   Download,
   FileAudio,
   Film,
+  Languages,
   LinkIcon,
   PackageCheck,
   Search,
@@ -53,9 +55,11 @@ import {
   previewUrl,
   startJob
 } from "./api";
+import { LANGUAGE_STORAGE_KEY, isLanguage, languageOptions, translations } from "./i18n";
+import type { Language, Translation } from "./i18n";
 import type { JobStatusResponse, MediaKind, PreviewEntry, PreviewResponse, ServerStatusResponse } from "./types";
 
-const urlSchema = z.string().url("Enter a valid YouTube URL.");
+const urlSchema = z.string().url();
 const MAX_SELECTED_ITEMS = 50;
 const CURRENT_JOB_STORAGE_KEY = "sbaradio-ytdlp-current-job-id";
 const TERMINAL_JOB_STATUSES = new Set<JobStatusResponse["status"]>(["ready", "failed", "cancelled"]);
@@ -70,6 +74,7 @@ const qualityOptions: Record<MediaKind, string[]> = {
 
 function App() {
   const queryClient = useQueryClient();
+  const [language, setLanguage] = useState<Language>(() => readStoredLanguage());
   const [url, setUrl] = useState("");
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -79,6 +84,7 @@ function App() {
   const [jobId, setJobId] = useState<string | null>(() => readStoredJobId());
   const [liveJob, setLiveJob] = useState<JobStatusResponse | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const t = translations[language];
 
   const previewMutation = useMutation({
     mutationFn: previewUrl,
@@ -92,7 +98,7 @@ function App() {
         setSelectedIds([]);
       }
     },
-    onError: (error) => setNotice(errorMessage(error))
+    onError: (error) => setNotice(errorMessage(error, t))
   });
 
   const startMutation = useMutation({
@@ -101,7 +107,7 @@ function App() {
       setActiveJob(data.jobId);
       setLiveJob(data);
     },
-    onError: (error) => setNotice(errorMessage(error))
+    onError: (error) => setNotice(errorMessage(error, t))
   });
 
   const cancelMutation = useMutation({
@@ -110,7 +116,7 @@ function App() {
       setLiveJob(data);
       void queryClient.invalidateQueries({ queryKey: ["available-jobs"] });
     },
-    onError: (error) => setNotice(errorMessage(error))
+    onError: (error) => setNotice(errorMessage(error, t))
   });
 
   const clearAvailableMutation = useMutation({
@@ -118,7 +124,7 @@ function App() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["available-jobs"] });
     },
-    onError: (error) => setNotice(errorMessage(error))
+    onError: (error) => setNotice(errorMessage(error, t))
   });
 
   const polledJob = useQuery({
@@ -165,8 +171,14 @@ function App() {
   const serverStatusDetail = getServerStatusDetail(
     serverStatusQuery.data,
     serverStatusQuery.error,
-    serverStatusQuery.isFetching
+    serverStatusQuery.isFetching,
+    t
   );
+
+  useEffect(() => {
+    document.documentElement.lang = language;
+    writeStoredLanguage(language);
+  }, [language]);
 
   useEffect(() => {
     if (!jobId) {
@@ -183,17 +195,17 @@ function App() {
       const payload = JSON.parse(event.data) as Partial<JobStatusResponse> & { error?: string };
       if (!payload.jobId) {
         clearActiveJob();
-        setNotice(payload.error ?? "Previous download is no longer available.");
+        setNotice(payload.error ? localizeBackendError(payload.error, t) : t.previousDownloadMissing);
         return;
       }
       setLiveJob(payload as JobStatusResponse);
     };
     socket.onerror = () => {
-      setNotice("Live progress disconnected. Polling is still active.");
+      setNotice(t.liveProgressDisconnected);
     };
 
     return () => socket.close();
-  }, [jobId]);
+  }, [jobId, t]);
 
   useEffect(() => {
     if (!polledJob.data) {
@@ -212,12 +224,12 @@ function App() {
 
     if (polledJob.error instanceof ApiError && polledJob.error.status === 404) {
       clearActiveJob();
-      setNotice("Previous download is no longer available.");
+      setNotice(t.previousDownloadMissing);
       return;
     }
 
-    setNotice(errorMessage(polledJob.error));
-  }, [polledJob.error]);
+    setNotice(errorMessage(polledJob.error, t));
+  }, [polledJob.error, t]);
 
   function setActiveJob(nextJobId: string) {
     setJobId(nextJobId);
@@ -229,11 +241,15 @@ function App() {
     clearStoredJobId();
   }
 
+  function changeLanguage(nextLanguage: Language) {
+    setLanguage(nextLanguage);
+  }
+
   function submitPreview(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const parsed = urlSchema.safeParse(url.trim());
     if (!parsed.success) {
-      setNotice(parsed.error.issues[0]?.message ?? "Enter a valid YouTube URL.");
+      setNotice(t.validYouTubeUrl);
       return;
     }
     previewMutation.mutate(parsed.data);
@@ -258,7 +274,7 @@ function App() {
         return current.filter((id) => id !== entryId);
       }
       if (current.length >= MAX_SELECTED_ITEMS) {
-        setNotice(`Select at most ${MAX_SELECTED_ITEMS} playlist items.`);
+        setNotice(t.selectAtMost(MAX_SELECTED_ITEMS));
         return current;
       }
       return [...current, entryId];
@@ -285,23 +301,29 @@ function App() {
   }
 
   return (
-    <Box className="min-h-screen bg-[radial-gradient(circle_at_top_left,#e9f4f1_0,#f6f7f4_32rem,#f1efe8_100%)]">
+    <Box className="app-shell min-h-screen bg-[linear-gradient(180deg,#eff6ff_0%,#ffffff_28rem,#f8fbff_100%)]">
       <Container maxWidth="lg" className="py-8 md:py-10">
         <Stack spacing={3}>
-          <Header serverStatus={serverStatus} serverStatusDetail={serverStatusDetail} />
+          <Header
+            serverStatus={serverStatus}
+            serverStatusDetail={serverStatusDetail}
+            language={language}
+            onLanguageChange={changeLanguage}
+            t={t}
+          />
 
-          <Paper variant="outlined" className="p-4 md:p-5">
+          <Paper variant="outlined" className="motion-card motion-delay-1 p-4 md:p-5">
             <Stack component="form" onSubmit={submitPreview} spacing={2}>
               <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
                 <TextField
                   fullWidth
-                  label="YouTube link"
+                  label={t.youtubeLink}
                   value={url}
                   onChange={(event) => setUrl(event.target.value)}
                   placeholder="https://www.youtube.com/watch?v=..."
                   autoComplete="off"
                   InputProps={{
-                    startAdornment: <LinkIcon size={18} className="mr-2 text-slate-500" />
+                    startAdornment: <LinkIcon size={18} className="mr-2 text-blue-500" />
                   }}
                 />
                 <Button
@@ -310,9 +332,9 @@ function App() {
                   size="large"
                   startIcon={previewMutation.isPending ? <CircularProgress size={18} color="inherit" /> : <Search size={18} />}
                   disabled={previewMutation.isPending}
-                  className="md:w-40"
+                  className="action-button md:w-40"
                 >
-                  Preview
+                  {t.preview}
                 </Button>
               </Stack>
             </Stack>
@@ -320,33 +342,40 @@ function App() {
 
           {preview && (
             <Stack direction={{ xs: "column", lg: "row" }} spacing={3} alignItems="stretch">
-              <Paper variant="outlined" className="min-w-0 flex-1 p-4 md:p-5">
-                <PreviewPanel preview={preview} selectedIds={selectedIds} onToggle={toggleEntry} onSelectAll={selectAllVisible} onClear={clearSelection} />
+              <Paper variant="outlined" className="motion-card slide-from-left min-w-0 flex-1 p-4 md:p-5">
+                <PreviewPanel
+                  preview={preview}
+                  selectedIds={selectedIds}
+                  onToggle={toggleEntry}
+                  onSelectAll={selectAllVisible}
+                  onClear={clearSelection}
+                  t={t}
+                />
               </Paper>
 
-              <Paper variant="outlined" className="w-full p-4 md:w-[360px] md:p-5">
+              <Paper variant="outlined" className="motion-card slide-from-right w-full p-4 md:w-[360px] md:p-5">
                 <Stack spacing={2.5}>
-                  <FormatControls kind={kind} quality={quality} onKindChange={changeKind} onQualityChange={setQuality} />
+                  <FormatControls kind={kind} quality={quality} onKindChange={changeKind} onQualityChange={setQuality} t={t} />
 
                   <Divider />
 
                   <Stack spacing={1}>
                     <Stack direction="row" justifyContent="space-between">
                       <Typography variant="body2" color="text.secondary">
-                        Selected
+                        {t.selected}
                       </Typography>
-                      <Chip size="small" label={`${selectedCount} item${selectedCount === 1 ? "" : "s"}`} />
+                      <Chip size="small" label={t.itemCount(selectedCount)} />
                     </Stack>
 
                     {preview.kind === "playlist" && preview.entries.length > MAX_SELECTED_ITEMS && (
                       <Alert severity="warning">
-                        The first {MAX_SELECTED_ITEMS} items are selected by default. Reduce the playlist selection before starting.
+                        {t.playlistLimitWarning(MAX_SELECTED_ITEMS)}
                       </Alert>
                     )}
 
                     <FormControlLabel
                       control={<Checkbox checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} />}
-                      label="I have the right to download this media."
+                      label={t.termsAccepted}
                     />
                   </Stack>
 
@@ -357,8 +386,9 @@ function App() {
                     onClick={submitJob}
                     disabled={!canStart || startMutation.isPending}
                     fullWidth
+                    className="action-button"
                   >
-                    Start download
+                    {t.startDownload}
                   </Button>
                 </Stack>
               </Paper>
@@ -366,17 +396,18 @@ function App() {
           )}
 
           {job && (
-            <Paper variant="outlined" className="p-4 md:p-5">
-              <ProgressPanel job={job} onCancel={() => cancelMutation.mutate(job.jobId)} cancelling={cancelMutation.isPending} />
+            <Paper variant="outlined" className={`motion-card progress-card ${progressCardClass(job.status)} p-4 md:p-5`}>
+              <ProgressPanel job={job} onCancel={() => cancelMutation.mutate(job.jobId)} cancelling={cancelMutation.isPending} t={t} />
             </Paper>
           )}
 
           {availableJobs.length > 0 && (
-            <Paper variant="outlined" className="p-4 md:p-5">
+            <Paper variant="outlined" className="motion-card motion-delay-2 p-4 md:p-5">
               <AvailableDownloadsPanel
                 jobs={availableJobs}
                 onClear={(availableJobId) => clearAvailableMutation.mutate(availableJobId)}
                 clearingJobId={clearAvailableMutation.variables ?? null}
+                t={t}
               />
             </Paper>
           )}
@@ -416,6 +447,26 @@ function clearStoredJobId() {
   }
 }
 
+function readStoredLanguage(): Language {
+  try {
+    const storedLanguage = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    if (isLanguage(storedLanguage)) {
+      return storedLanguage;
+    }
+  } catch {
+    return "en";
+  }
+  return "en";
+}
+
+function writeStoredLanguage(language: Language) {
+  try {
+    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+  } catch {
+    return;
+  }
+}
+
 function getServerStatusState(
   data: ServerStatusResponse | undefined,
   error: Error | null,
@@ -433,51 +484,53 @@ function getServerStatusState(
 function getServerStatusDetail(
   data: ServerStatusResponse | undefined,
   error: Error | null,
-  isFetching: boolean
+  isFetching: boolean,
+  t: Translation
 ): string {
   if (error) {
-    return `Last check failed. Retrying every ${SERVER_STATUS_PROBLEM_INTERVAL_MS / 1000} seconds. ${errorMessage(error)}`;
+    return t.serverDetail.lastCheckFailed(SERVER_STATUS_PROBLEM_INTERVAL_MS / 1000, errorMessage(error, t));
   }
   if (!data) {
-    return "Waiting for the first server check.";
+    return t.serverDetail.waiting;
   }
 
   const failedChecks = Object.entries(data.checks)
     .filter(([, check]) => !check.ok)
-    .map(([name, check]) => `${name}: ${check.message}`);
-  const summary = failedChecks.length > 0 ? failedChecks.join("; ") : `${data.activeJobs}/${data.maxActiveJobs} active jobs`;
-  const refreshNote = isFetching ? " Refreshing now." : "";
-  return `${summary}. Uptime ${formatUptime(data.uptimeSeconds)}.${refreshNote}`;
+    .map(([name, check]) => `${name}: ${localizeHealthMessage(check.message, t)}`);
+  const summary = failedChecks.length > 0 ? failedChecks.join("; ") : t.serverDetail.activeJobs(data.activeJobs, data.maxActiveJobs);
+  const refreshNote = isFetching ? t.serverDetail.refreshing : "";
+  return `${summary}. ${t.serverDetail.uptime(formatUptime(data.uptimeSeconds, t))}${refreshNote}`;
 }
 
-function formatUptime(totalSeconds: number): string {
+function formatUptime(totalSeconds: number, t: Translation): string {
   const seconds = Math.max(0, Math.floor(totalSeconds));
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const remainingSeconds = seconds % 60;
 
   if (hours > 0) {
-    return `${hours}h ${minutes}m`;
+    return t.uptime.hoursMinutes(hours, minutes);
   }
   if (minutes > 0) {
-    return `${minutes}m ${remainingSeconds}s`;
+    return t.uptime.minutesSeconds(minutes, remainingSeconds);
   }
-  return `${remainingSeconds}s`;
+  return t.uptime.seconds(remainingSeconds);
 }
 
 function Header({
   serverStatus,
-  serverStatusDetail
+  serverStatusDetail,
+  language,
+  onLanguageChange,
+  t
 }: {
   serverStatus: ServerStatusState;
   serverStatusDetail: string;
+  language: Language;
+  onLanguageChange: (language: Language) => void;
+  t: Translation;
 }) {
-  const statusLabel = {
-    checking: "Checking server",
-    online: "Server online",
-    degraded: "Server degraded",
-    offline: "Server offline"
-  }[serverStatus];
+  const statusLabel = t.serverStatus[serverStatus];
 
   const chipColor = {
     checking: "default",
@@ -487,40 +540,59 @@ function Header({
   }[serverStatus] as "default" | "success" | "warning" | "error";
 
   return (
-    <Stack spacing={1}>
+    <Stack spacing={1} className="header-motion">
       <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }}>
         <Stack direction="row" spacing={1.25} alignItems="center">
-          <Box className="grid h-10 w-10 place-items-center rounded bg-[#1f6f78] text-white">
+          <Box className="logo-mark grid h-10 w-10 place-items-center rounded bg-blue-600 text-white">
             <Download size={21} />
           </Box>
           <Box>
             <Typography variant="h4" component="h1" fontWeight={800}>
-              SBARadioYTDLP
+              SBA YTDLP
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              YouTube video and playlist downloader
+              {t.appSubtitle}
             </Typography>
           </Box>
         </Stack>
 
-        <Chip
-          color={chipColor}
-          variant={serverStatus === "online" ? "filled" : "outlined"}
-          icon={
-            serverStatus === "checking" ? (
-              <CircularProgress size={14} color="inherit" />
-            ) : serverStatus === "online" ? (
-              <CheckCircle2 size={16} />
-            ) : serverStatus === "degraded" ? (
-              <TriangleAlert size={16} />
-            ) : (
-              <XCircle size={16} />
-            )
-          }
-          label={statusLabel}
-          aria-label={statusLabel}
-          title={serverStatusDetail}
-        />
+        <Stack direction="row" spacing={1} alignItems="center" className="w-full sm:w-auto">
+          <FormControl size="small" className="min-w-32" variant="outlined">
+            <InputLabel id="language-select-label">{t.languageLabel}</InputLabel>
+            <Select
+              labelId="language-select-label"
+              value={language}
+              label={t.languageLabel}
+              onChange={(event) => onLanguageChange(event.target.value as Language)}
+              startAdornment={<Languages size={16} className="mr-2 text-blue-500" />}
+            >
+              {languageOptions.map((option) => (
+                <MenuItem key={option.code} value={option.code}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Chip
+            className="status-chip"
+            color={chipColor}
+            variant={serverStatus === "online" ? "filled" : "outlined"}
+            icon={
+              serverStatus === "checking" ? (
+                <CircularProgress size={14} color="inherit" />
+              ) : serverStatus === "online" ? (
+                <CheckCircle2 size={16} />
+              ) : serverStatus === "degraded" ? (
+                <TriangleAlert size={16} />
+              ) : (
+                <XCircle size={16} />
+              )
+            }
+            label={statusLabel}
+            aria-label={statusLabel}
+            title={serverStatusDetail}
+          />
+        </Stack>
       </Stack>
     </Stack>
   );
@@ -532,20 +604,21 @@ interface PreviewPanelProps {
   onToggle: (entryId: string) => void;
   onSelectAll: () => void;
   onClear: () => void;
+  t: Translation;
 }
 
-function PreviewPanel({ preview, selectedIds, onToggle, onSelectAll, onClear }: PreviewPanelProps) {
+function PreviewPanel({ preview, selectedIds, onToggle, onSelectAll, onClear, t }: PreviewPanelProps) {
   const isPlaylist = preview.kind === "playlist";
 
   return (
-    <Stack spacing={2}>
+    <Stack spacing={2} className="preview-motion">
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
         <Thumbnail src={preview.thumbnail} title={preview.title} />
         <Stack spacing={1} className="min-w-0 flex-1">
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-            <Chip size="small" color={isPlaylist ? "secondary" : "primary"} label={isPlaylist ? "Playlist" : "Video"} />
+            <Chip size="small" color={isPlaylist ? "secondary" : "primary"} label={isPlaylist ? t.mediaKind.playlist : t.mediaKind.video} />
             {preview.duration ? <Chip size="small" variant="outlined" label={formatDuration(preview.duration)} /> : null}
-            {isPlaylist ? <Chip size="small" variant="outlined" label={`${preview.entries.length} items`} /> : null}
+            {isPlaylist ? <Chip size="small" variant="outlined" label={t.entries.count(preview.entries.length)} /> : null}
           </Stack>
           <Typography variant="h6" fontWeight={800} className="break-words">
             {preview.title}
@@ -562,28 +635,28 @@ function PreviewPanel({ preview, selectedIds, onToggle, onSelectAll, onClear }: 
         <>
           <Stack direction="row" spacing={1} alignItems="center">
             <Button size="small" variant="outlined" onClick={onSelectAll}>
-              Select first {Math.min(MAX_SELECTED_ITEMS, preview.entries.length)}
+              {t.entries.selectFirst(Math.min(MAX_SELECTED_ITEMS, preview.entries.length))}
             </Button>
             <Button size="small" color="inherit" onClick={onClear}>
-              Clear
+              {t.entries.clear}
             </Button>
             <Typography variant="body2" color="text.secondary" className="ml-auto">
-              {selectedIds.length} selected
+              {t.entries.selected(selectedIds.length)}
             </Typography>
           </Stack>
 
-          <TableContainer className="max-h-[460px] rounded border border-slate-200">
-            <Table stickyHeader size="small" aria-label="Playlist entries">
+          <TableContainer className="max-h-[460px] rounded border border-blue-100">
+            <Table stickyHeader size="small" aria-label={t.entries.tableAria}>
               <TableHead>
                 <TableRow>
                   <TableCell padding="checkbox" />
-                  <TableCell>Title</TableCell>
-                  <TableCell width={110}>Duration</TableCell>
+                  <TableCell>{t.entries.title}</TableCell>
+                  <TableCell width={110}>{t.entries.duration}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {preview.entries.map((entry) => (
-                  <PlaylistRow key={`${entry.id}-${entry.index}`} entry={entry} checked={selectedIds.includes(entry.id)} onToggle={onToggle} />
+                  <PlaylistRow key={`${entry.id}-${entry.index}`} entry={entry} checked={selectedIds.includes(entry.id)} onToggle={onToggle} t={t} />
                 ))}
               </TableBody>
             </Table>
@@ -594,11 +667,21 @@ function PreviewPanel({ preview, selectedIds, onToggle, onSelectAll, onClear }: 
   );
 }
 
-function PlaylistRow({ entry, checked, onToggle }: { entry: PreviewEntry; checked: boolean; onToggle: (entryId: string) => void }) {
+function PlaylistRow({
+  entry,
+  checked,
+  onToggle,
+  t
+}: {
+  entry: PreviewEntry;
+  checked: boolean;
+  onToggle: (entryId: string) => void;
+  t: Translation;
+}) {
   return (
-    <TableRow hover selected={checked}>
+    <TableRow hover selected={checked} className="animated-row">
       <TableCell padding="checkbox">
-        <Checkbox checked={checked} onChange={() => onToggle(entry.id)} inputProps={{ "aria-label": `Select ${entry.title}` }} />
+        <Checkbox checked={checked} onChange={() => onToggle(entry.id)} inputProps={{ "aria-label": t.entries.selectEntry(entry.title) }} />
       </TableCell>
       <TableCell>
         <Stack direction="row" spacing={1.5} alignItems="center">
@@ -622,11 +705,11 @@ function Thumbnail({ src, title, compact = false }: { src?: string | null; title
   const classes = compact ? "h-12 w-20" : "h-32 w-full sm:w-56";
 
   return (
-    <Box className={`${classes} shrink-0 overflow-hidden rounded bg-slate-200`}>
+    <Box className={`thumbnail-frame ${classes} shrink-0 overflow-hidden rounded bg-blue-50`}>
       {src ? (
-        <img src={src} alt={title} className="h-full w-full object-cover" loading="lazy" />
+        <img src={src} alt={title} className="thumbnail-image h-full w-full object-cover" loading="lazy" />
       ) : (
-        <Box className="grid h-full w-full place-items-center text-slate-500">
+        <Box className="grid h-full w-full place-items-center text-blue-500">
           <Film size={compact ? 18 : 32} />
         </Box>
       )}
@@ -638,19 +721,21 @@ function FormatControls({
   kind,
   quality,
   onKindChange,
-  onQualityChange
+  onQualityChange,
+  t
 }: {
   kind: MediaKind;
   quality: string;
   onKindChange: (kind: MediaKind | null) => void;
   onQualityChange: (quality: string) => void;
+  t: Translation;
 }) {
   const options = useMemo(() => qualityOptions[kind], [kind]);
 
   return (
     <Stack spacing={2}>
       <FormControl>
-        <FormLabel className="mb-2">Format</FormLabel>
+        <FormLabel className="mb-2">{t.controls.format}</FormLabel>
         <ToggleButtonGroup value={kind} exclusive onChange={(_, value) => onKindChange(value)} fullWidth>
           <ToggleButton value="mp4">
             <Stack direction="row" spacing={1} alignItems="center">
@@ -668,11 +753,11 @@ function FormatControls({
       </FormControl>
 
       <FormControl fullWidth>
-        <FormLabel className="mb-2">Quality</FormLabel>
+        <FormLabel className="mb-2">{t.controls.quality}</FormLabel>
         <Select value={quality} onChange={(event) => onQualityChange(event.target.value)}>
           {options.map((option) => (
             <MenuItem key={option} value={option}>
-              {qualityLabel(kind, option)}
+              {qualityLabel(kind, option, t)}
             </MenuItem>
           ))}
         </Select>
@@ -684,55 +769,57 @@ function FormatControls({
 function AvailableDownloadsPanel({
   jobs,
   onClear,
-  clearingJobId
+  clearingJobId,
+  t
 }: {
   jobs: JobStatusResponse[];
   onClear: (jobId: string) => void;
   clearingJobId: string | null;
+  t: Translation;
 }) {
   return (
     <Stack spacing={2}>
       <Stack direction={{ xs: "column", sm: "row" }} spacing={1} justifyContent="space-between" alignItems={{ xs: "stretch", sm: "center" }}>
         <Box>
           <Typography variant="h6" fontWeight={800}>
-            Available downloads
+            {t.downloads.available}
           </Typography>
         </Box>
-        <Chip size="small" label={`${jobs.length} ready`} />
+        <Chip size="small" label={t.downloads.readyCount(jobs.length)} />
       </Stack>
 
-      <TableContainer className="rounded border border-slate-200">
-        <Table size="small" aria-label="Available downloads">
+      <TableContainer className="rounded border border-blue-100">
+        <Table size="small" aria-label={t.downloads.tableAria}>
           <TableHead>
             <TableRow>
-              <TableCell>File</TableCell>
-              <TableCell width={150}>Ready</TableCell>
+              <TableCell>{t.downloads.file}</TableCell>
+              <TableCell width={150}>{t.downloads.ready}</TableCell>
               <TableCell align="right" width={220}>
-                Actions
+                {t.downloads.actions}
               </TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {jobs.map((availableJob) => (
-              <TableRow key={availableJob.jobId} hover>
+              <TableRow key={availableJob.jobId} hover className="animated-row">
                 <TableCell>
                   <Stack spacing={0.5}>
                     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                       <Typography variant="body2" fontWeight={800}>
-                        {availableJob.isArchive ? "Playlist archive" : "Media file"}
+                        {availableJob.isArchive ? t.downloads.playlistArchive : t.downloads.mediaFile}
                       </Typography>
-                      <Chip size="small" variant="outlined" label={availableJob.isArchive ? "ZIP" : "Media"} />
+                      <Chip size="small" variant="outlined" label={availableJob.isArchive ? t.downloads.zip : t.downloads.media} />
                     </Stack>
                     <Typography variant="caption" color="text.secondary">
-                      {availableJob.message ?? statusLabel(availableJob.status)}
+                      {availableJob.message ? localizeBackendMessage(availableJob.message, t) : statusLabel(availableJob.status, t)}
                     </Typography>
                   </Stack>
                 </TableCell>
-                <TableCell>{formatDateTime(availableJob.updatedAt)}</TableCell>
+                <TableCell>{formatDateTime(availableJob.updatedAt, t)}</TableCell>
                 <TableCell align="right">
                   <Stack direction="row" spacing={1} justifyContent="flex-end">
                     <Button component="a" href={downloadUrl(availableJob.jobId)} size="small" variant="contained" startIcon={<Download size={16} />}>
-                      Download
+                      {t.downloads.download}
                     </Button>
                     <Button
                       size="small"
@@ -742,7 +829,7 @@ function AvailableDownloadsPanel({
                       disabled={clearingJobId === availableJob.jobId}
                       startIcon={<Trash2 size={16} />}
                     >
-                      Clear
+                      {t.downloads.clear}
                     </Button>
                   </Stack>
                 </TableCell>
@@ -755,21 +842,23 @@ function AvailableDownloadsPanel({
   );
 }
 
-function ProgressPanel({ job, onCancel, cancelling }: { job: JobStatusResponse; onCancel: () => void; cancelling: boolean }) {
+function ProgressPanel({ job, onCancel, cancelling, t }: { job: JobStatusResponse; onCancel: () => void; cancelling: boolean; t: Translation }) {
   const terminal = isTerminalJobStatus(job.status);
   const color = job.status === "failed" ? "error" : job.status === "ready" ? "success" : "primary";
+  const statusMessage = job.message ? localizeBackendMessage(job.message, t) : job.currentItem ?? t.progress.working;
+  const progressClass = terminal ? "progress-bar progress-bar-static h-2 rounded" : "progress-bar progress-bar-active h-2 rounded";
 
   return (
     <Stack spacing={2}>
       <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} justifyContent="space-between" alignItems={{ xs: "stretch", md: "center" }}>
         <Stack direction="row" spacing={1} alignItems="center">
-          {job.status === "ready" ? <CheckCircle2 size={22} className="text-emerald-700" /> : job.status === "failed" ? <XCircle size={22} className="text-red-700" /> : <PackageCheck size={22} className="text-[#1f6f78]" />}
+          {job.status === "ready" ? <CheckCircle2 size={22} className="text-green-700" /> : job.status === "failed" ? <XCircle size={22} className="text-red-700" /> : <PackageCheck size={22} className="text-blue-600" />}
           <Box>
             <Typography variant="subtitle1" fontWeight={800}>
-              {statusLabel(job.status)}
+              {statusLabel(job.status, t)}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {job.message ?? job.currentItem ?? "Working"}
+              {statusMessage}
             </Typography>
           </Box>
         </Stack>
@@ -777,22 +866,22 @@ function ProgressPanel({ job, onCancel, cancelling }: { job: JobStatusResponse; 
         <Stack direction="row" spacing={1}>
           {!terminal && (
             <Button color="inherit" variant="outlined" onClick={onCancel} disabled={cancelling} startIcon={<XCircle size={18} />}>
-              Cancel
+              {t.progress.cancel}
             </Button>
           )}
           {job.status === "ready" && (
             <Button component="a" href={downloadUrl(job.jobId)} variant="contained" startIcon={<Download size={18} />}>
-              Download {job.isArchive ? "ZIP" : "file"}
+              {t.downloads.downloadReady(job.isArchive)}
             </Button>
           )}
         </Stack>
       </Stack>
 
       <Box>
-        <LinearProgress variant="determinate" value={job.progress} color={color} className="h-2 rounded" />
+        <LinearProgress variant="determinate" value={job.progress} color={color} className={progressClass} />
         <Stack direction="row" justifyContent="space-between" className="mt-1">
           <Typography variant="caption" color="text.secondary">
-            {job.completedItems} / {job.totalItems || 1} done
+            {t.progress.done(job.completedItems, job.totalItems || 1)}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {Math.round(job.progress)}%
@@ -806,19 +895,128 @@ function ProgressPanel({ job, onCancel, cancelling }: { job: JobStatusResponse; 
         </Typography>
       )}
 
-      {job.error && <Alert severity="error">{job.error}</Alert>}
+      {job.error && <Alert severity="error">{localizeBackendError(job.error, t)}</Alert>}
     </Stack>
   );
 }
 
-function errorMessage(error: unknown): string {
+function errorMessage(error: unknown, t: Translation): string {
   if (error instanceof ApiError) {
-    return error.message;
+    return localizeBackendError(error.message, t);
   }
   if (error instanceof Error) {
-    return error.message;
+    return localizeBackendError(error.message, t);
   }
-  return "Something went wrong.";
+  return t.somethingWentWrong;
+}
+
+function progressCardClass(status: JobStatusResponse["status"]): string {
+  if (status === "ready") {
+    return "progress-card-ready";
+  }
+  if (status === "failed") {
+    return "progress-card-failed";
+  }
+  if (status === "cancelled") {
+    return "progress-card-cancelled";
+  }
+  return "progress-card-active";
+}
+
+function localizeBackendMessage(message: string, t: Translation): string {
+  const exactMessages: Record<string, string> = {
+    Queued: t.backendMessages.queued,
+    "Reading media information": t.backendMessages.readingMedia,
+    "Starting download": t.backendMessages.startingDownload,
+    "Converting or merging media": t.backendMessages.converting,
+    "Creating ZIP archive": t.backendMessages.creatingArchive,
+    "Ready to download": t.backendMessages.readyToDownload,
+    Cancelled: t.backendMessages.cancelled,
+    Cancelling: t.backendMessages.cancelling,
+    "Download failed": t.backendMessages.downloadFailed
+  };
+  if (exactMessages[message]) {
+    return exactMessages[message];
+  }
+
+  const progressMatch = message.match(/^Downloading (\d+) of (\d+)(?: - (.*))?$/);
+  if (progressMatch) {
+    const [, current, total, detail] = progressMatch;
+    const translated = t.backendMessages.downloadingOf(Number(current), Number(total));
+    if (!detail) {
+      return translated;
+    }
+    return `${translated} - ${localizeProgressDetail(detail, t)}`;
+  }
+
+  return message;
+}
+
+function localizeProgressDetail(detail: string, t: Translation): string {
+  return detail
+    .split(" - ")
+    .map((part) => {
+      const etaMatch = part.match(/^ETA\s+(.+)$/);
+      return etaMatch ? t.backendMessages.eta(etaMatch[1]) : part;
+    })
+    .join(" - ");
+}
+
+function localizeBackendError(message: string, t: Translation): string {
+  const exactErrors: Record<string, string> = {
+    "Request failed.": t.requestFailed,
+    "Confirm that you have the right to download this media.": t.backendErrors.confirmRights,
+    "Job not found.": t.backendErrors.jobNotFound,
+    "Download is not ready yet.": t.backendErrors.downloadNotReady,
+    "The temporary file is no longer available.": t.backendErrors.temporaryFileMissing,
+    "Enter a valid YouTube URL.": t.backendErrors.invalidYouTubeUrl,
+    "Enter a YouTube video or playlist URL.": t.backendErrors.videoOrPlaylistUrl,
+    "This item is longer than the configured duration limit.": t.backendErrors.durationLimit,
+    "Could not read media information.": t.backendErrors.couldNotReadMedia,
+    "This link does not contain downloadable videos. Paste a YouTube video or playlist URL.": t.backendErrors.notDownloadableList,
+    "This link does not contain downloadable videos.": t.backendErrors.notDownloadableList,
+    "This link is not a downloadable YouTube video or playlist.": t.backendErrors.notDownloadableLink,
+    "This link is not a downloadable YouTube video.": t.backendErrors.notDownloadableLink,
+    "No selected playlist items were found.": t.backendErrors.noSelectedItems,
+    "Another download is already running.": t.backendErrors.anotherDownloadRunning,
+    "YouTube asked for sign-in/bot verification. Configure APP_YTDLP_COOKIE_FILE with exported browser cookies, or APP_YTDLP_COOKIES_FROM_BROWSER where available, then retry.":
+      t.backendErrors.botVerification
+  };
+  if (exactErrors[message]) {
+    return exactErrors[message];
+  }
+
+  const unsupportedMatch = message.match(/^Unsupported ([A-Z0-9]+) quality\. Choose one of: (.+)\.$/);
+  if (unsupportedMatch) {
+    return t.backendErrors.unsupportedQuality(unsupportedMatch[1], unsupportedMatch[2]);
+  }
+
+  const playlistLimitMatch = message.match(/^Select at most (\d+) playlist items\.$/);
+  if (playlistLimitMatch) {
+    return t.selectAtMost(Number(playlistLimitMatch[1]));
+  }
+
+  return message;
+}
+
+function localizeHealthMessage(message: string, t: Translation): string {
+  const exactMessages: Record<string, string> = {
+    "Temp root is writable": t.healthMessages.tempRootWritable,
+    "Redis check disabled": t.healthMessages.redisDisabled,
+    "Redis package is not installed": t.healthMessages.redisPackageMissing,
+    "Redis ping succeeded": t.healthMessages.redisPingSucceeded
+  };
+  if (exactMessages[message]) {
+    return exactMessages[message];
+  }
+
+  if (message.startsWith("Temp root is not writable:")) {
+    return message.replace("Temp root is not writable", t.healthMessages.tempRootNotWritable);
+  }
+  if (message.startsWith("Redis is not reachable:")) {
+    return message.replace("Redis is not reachable", t.healthMessages.redisNotReachable);
+  }
+  return message;
 }
 
 function formatDuration(seconds: number): string {
@@ -832,8 +1030,9 @@ function formatDuration(seconds: number): string {
   return `${minutes}:${String(secs).padStart(2, "0")}`;
 }
 
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
+function formatDateTime(value: string, t: Translation): string {
+  const locale = t === translations.ru ? "ru-RU" : "en";
+  return new Intl.DateTimeFormat(locale, {
     dateStyle: "short",
     timeStyle: "short"
   }).format(new Date(value));
@@ -843,23 +1042,13 @@ function isTerminalJobStatus(status?: JobStatusResponse["status"] | null): boole
   return Boolean(status && TERMINAL_JOB_STATUSES.has(status));
 }
 
-function statusLabel(status: JobStatusResponse["status"]): string {
-  const labels: Record<JobStatusResponse["status"], string> = {
-    queued: "Queued",
-    metadata: "Reading media",
-    downloading: "Downloading",
-    converting: "Converting",
-    archiving: "Creating archive",
-    ready: "Ready",
-    failed: "Failed",
-    cancelled: "Cancelled"
-  };
-  return labels[status];
+function statusLabel(status: JobStatusResponse["status"], t: Translation): string {
+  return t.jobStatus[status];
 }
 
-function qualityLabel(kind: MediaKind, quality: string): string {
+function qualityLabel(kind: MediaKind, quality: string, t: Translation): string {
   if (quality === "best") {
-    return kind === "mp4" ? "Best available" : "Best audio";
+    return t.controls.qualityBest[kind];
   }
   return quality;
 }
