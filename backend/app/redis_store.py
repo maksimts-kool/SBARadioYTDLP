@@ -19,6 +19,8 @@ class RedisJobStore:
         self.lock_ttl_seconds = lock_ttl_seconds
         self.socket_timeout_seconds = socket_timeout_seconds
         self._client = None
+        self._blocking_client = None
+        self._blocking_socket_timeout_seconds: float | None = None
 
     @property
     def enabled(self) -> bool:
@@ -88,7 +90,7 @@ class RedisJobStore:
         if not self.enabled:
             return None
 
-        item = self._client_or_raise().blpop(self._queue_key(), timeout=timeout_seconds)
+        item = self._blocking_client_or_raise(timeout_seconds).blpop(self._queue_key(), timeout=timeout_seconds)
         if item is None:
             return None
         return self._decode(item[1])
@@ -202,6 +204,21 @@ class RedisJobStore:
             socket_timeout=self.socket_timeout_seconds,
         )
         return self._client
+
+    def _blocking_client_or_raise(self, timeout_seconds: int):
+        socket_timeout = max(float(timeout_seconds) + 1.0, self.socket_timeout_seconds)
+        if self._blocking_client is not None and self._blocking_socket_timeout_seconds == socket_timeout:
+            return self._blocking_client
+
+        import redis
+
+        self._blocking_client = redis.Redis.from_url(
+            self.redis_url,
+            socket_connect_timeout=self.socket_timeout_seconds,
+            socket_timeout=socket_timeout,
+        )
+        self._blocking_socket_timeout_seconds = socket_timeout
+        return self._blocking_client
 
     def _active_index_key(self) -> str:
         return f"{self.namespace}:jobs:active"
