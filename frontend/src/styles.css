@@ -355,11 +355,12 @@ body {
 .admin-visual-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 12px;
 }
 
 .admin-visual-card {
-  min-height: 224px;
+  min-height: 0;
 }
 
 .admin-shell .tabler-progress {
@@ -454,10 +455,17 @@ body {
   background: var(--tabler-danger);
 }
 
+.tabler-sparkline-panel {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+}
+
 .tabler-sparkline {
   display: block;
   width: 100%;
-  height: 98px;
+  height: 128px;
+  overflow: visible;
 }
 
 .tabler-sparkline-area {
@@ -479,8 +487,10 @@ body {
   stroke-width: 2;
 }
 
-.tabler-sparkline-labels {
-  padding: 0 2px;
+.tabler-sparkline-label {
+  fill: var(--tabler-muted);
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .admin-shell .tabler-table {

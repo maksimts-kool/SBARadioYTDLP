@@ -1061,14 +1061,9 @@ function AdminVisuals({ dashboard, t }: { dashboard: AdminDashboardResponse; t: 
               {t.admin.visuals.lastSevenDays}
             </Typography>
           </Box>
-          <Sparkline points={activityPoints.map((point) => point.count)} />
-          <Stack direction="row" justifyContent="space-between" className="tabler-sparkline-labels">
-            {activityPoints.map((point) => (
-              <Typography key={point.label} variant="caption" color="text.secondary">
-                {point.label}
-              </Typography>
-            ))}
-          </Stack>
+          <Box className="tabler-sparkline-panel">
+            <Sparkline points={activityPoints.map((point) => point.count)} labels={activityPoints.map((point) => point.label)} />
+          </Box>
         </Stack>
       </Paper>
     </Box>
@@ -1103,17 +1098,19 @@ function MetricRow({
   );
 }
 
-function Sparkline({ points }: { points: number[] }) {
+function Sparkline({ points, labels }: { points: number[]; labels: string[] }) {
   const width = 260;
-  const height = 86;
+  const height = 118;
+  const chartHeight = 82;
   const max = Math.max(...points, 1);
+  const hasData = points.some((point) => point > 0);
   const step = points.length > 1 ? width / (points.length - 1) : width;
   const coordinates = points.map((value, index) => {
     const x = index * step;
-    const y = height - 10 - (value / max) * (height - 22);
+    const y = hasData ? chartHeight - 10 - (value / max) * (chartHeight - 22) : chartHeight - 18;
     return `${x},${y}`;
   });
-  const area = `0,${height} ${coordinates.join(" ")} ${width},${height}`;
+  const area = `0,${chartHeight} ${coordinates.join(" ")} ${width},${chartHeight}`;
 
   return (
     <svg className="tabler-sparkline" viewBox={`0 0 ${width} ${height}`} role="img" aria-hidden="true">
@@ -1122,6 +1119,14 @@ function Sparkline({ points }: { points: number[] }) {
       {coordinates.map((coordinate) => {
         const [x, y] = coordinate.split(",");
         return <circle key={coordinate} cx={x} cy={y} r="3" className="tabler-sparkline-dot" />;
+      })}
+      {coordinates.map((coordinate, index) => {
+        const [x] = coordinate.split(",");
+        return (
+          <text key={`${labels[index]}-${x}`} x={x} y={height - 6} textAnchor="middle" className="tabler-sparkline-label">
+            {labels[index]}
+          </text>
+        );
       })}
     </svg>
   );
