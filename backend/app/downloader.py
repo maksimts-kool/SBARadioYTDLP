@@ -462,7 +462,7 @@ def progress_message(data: Dict[str, Any], position: int, total: int) -> str:
 
 
 def check_cancelled(job: Job) -> None:
-    if job.cancel_event.is_set():
+    if job.cancel_event.is_set() or (job.cancel_check is not None and job.cancel_check(job.id)):
         raise DownloadCancelled()
 
 

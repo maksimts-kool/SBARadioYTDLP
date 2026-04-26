@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 from typing import Optional
 
-from .models import JobStatusResponse
+from .models import JobState, JobStatusResponse
 
 
 class RedisJobStore:
@@ -70,6 +71,62 @@ class RedisJobStore:
             pipe.delete(self._active_job_key(job_id))
             pipe.execute()
 
+    def active_count(self) -> int:
+        if not self.enabled:
+            return 0
+
+        client = self._client_or_raise()
+        now = self._now_seconds()
+        client.zremrangebyscore(self._active_index_key(), "-inf", now - self.lock_ttl_seconds)
+        return int(client.zcard(self._active_index_key()))
+
+    def enqueue_job(self, job_id: str) -> None:
+        if self.enabled:
+            self._client_or_raise().rpush(self._queue_key(), job_id)
+
+    def dequeue_job_id(self, timeout_seconds: int = 5) -> str | None:
+        if not self.enabled:
+            return None
+
+        item = self._client_or_raise().blpop(self._queue_key(), timeout=timeout_seconds)
+        if item is None:
+            return None
+        return self._decode(item[1])
+
+    def save_job_payload(self, payload: dict[str, object]) -> None:
+        if self.enabled:
+            self._client_or_raise().set(self._job_data_key(str(payload["id"])), json.dumps(payload))
+
+    def load_job_payload(self, job_id: str) -> dict[str, object] | None:
+        if not self.enabled:
+            return None
+
+        payload = self._client_or_raise().get(self._job_data_key(job_id))
+        if not payload:
+            return None
+        try:
+            decoded = json.loads(self._decode(payload))
+        except json.JSONDecodeError:
+            return None
+        return decoded if isinstance(decoded, dict) else None
+
+    def delete_job(self, job_id: str) -> None:
+        if not self.enabled:
+            return
+
+        client = self._client_or_raise()
+        with client.pipeline() as pipe:
+            pipe.delete(self._job_data_key(job_id))
+            pipe.delete(self._snapshot_key(job_id))
+            pipe.zrem(self._history_key(), job_id)
+            pipe.zrem(self._active_index_key(), job_id)
+            pipe.delete(self._active_job_key(job_id))
+            pipe.execute()
+
+    def is_cancel_requested(self, job_id: str) -> bool:
+        payload = self.load_job_payload(job_id)
+        return payload is not None and payload.get("status") == JobState.cancelled.value
+
     def remember_job(self, snapshot: JobStatusResponse, history_limit: int) -> None:
         if not self.enabled:
             return
@@ -115,6 +172,24 @@ class RedisJobStore:
                 continue
         return snapshots
 
+    def load_history_payloads(self, history_limit: int) -> list[dict[str, object]]:
+        if not self.enabled:
+            return []
+
+        client = self._client_or_raise()
+        job_ids = [self._decode(value) for value in client.zrevrange(self._history_key(), 0, history_limit - 1)]
+        payloads: list[dict[str, object]] = []
+        for payload in client.mget([self._job_data_key(job_id) for job_id in job_ids]):
+            if not payload:
+                continue
+            try:
+                decoded = json.loads(self._decode(payload))
+            except json.JSONDecodeError:
+                continue
+            if isinstance(decoded, dict):
+                payloads.append(decoded)
+        return payloads
+
     def _client_or_raise(self):
         if self._client is not None:
             return self._client
@@ -139,6 +214,12 @@ class RedisJobStore:
 
     def _snapshot_key(self, job_id: str) -> str:
         return f"{self.namespace}:jobs:snapshot:{job_id}"
+
+    def _job_data_key(self, job_id: str) -> str:
+        return f"{self.namespace}:jobs:data:{job_id}"
+
+    def _queue_key(self) -> str:
+        return f"{self.namespace}:jobs:queue"
 
     @staticmethod
     def _now_seconds() -> int:

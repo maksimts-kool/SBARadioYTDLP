@@ -9,6 +9,8 @@ class FakeRedisJobStore:
         self.remembered: list[JobStatusResponse] = []
         self.refreshed: list[str] = []
         self.released: list[str] = []
+        self.enqueued: list[str] = []
+        self.payloads: dict[str, dict[str, object]] = {}
 
     def reserve_active_slot(self, job_id: str, max_active_jobs: int) -> bool:
         return self.reserve_result
@@ -24,6 +26,25 @@ class FakeRedisJobStore:
 
     def load_history(self, history_limit: int) -> list[JobStatusResponse]:
         return self.history[:history_limit]
+
+    def enqueue_job(self, job_id: str) -> None:
+        self.enqueued.append(job_id)
+
+    def save_job_payload(self, payload: dict[str, object]) -> None:
+        self.payloads[str(payload["id"])] = payload
+
+    def load_job_payload(self, job_id: str) -> dict[str, object] | None:
+        return self.payloads.get(job_id)
+
+    def active_count(self) -> int:
+        return len(self.refreshed) - len(self.released)
+
+    def load_history_payloads(self, history_limit: int) -> list[dict[str, object]]:
+        return list(self.payloads.values())[:history_limit]
+
+    def is_cancel_requested(self, job_id: str) -> bool:
+        payload = self.payloads.get(job_id)
+        return payload is not None and payload.get("status") == JobState.cancelled.value
 
 
 def test_job_manager_uses_redis_for_active_capacity(tmp_path):
@@ -68,3 +89,25 @@ def test_job_manager_loads_history_from_redis(tmp_path):
     manager = JobManager(tmp_path, max_active_jobs=1, redis_store=FakeRedisJobStore(history=[snapshot]))
 
     assert manager.history()[0].jobId == "stored-job"
+
+
+def test_job_manager_enqueues_and_loads_redis_job_payload(tmp_path):
+    redis_store = FakeRedisJobStore()
+    manager = JobManager(tmp_path, max_active_jobs=1, redis_store=redis_store)
+
+    job = manager.create(
+        "https://www.youtube.com/watch?v=abc12345678",
+        MediaKind.mp4,
+        "best",
+        [],
+        enforce_capacity=False,
+        enqueue=True,
+    )
+    manager._jobs.clear()
+
+    loaded = manager.get(job.id)
+
+    assert redis_store.enqueued == [job.id]
+    assert loaded is not None
+    assert loaded.id == job.id
+    assert loaded.cancel_check is not None

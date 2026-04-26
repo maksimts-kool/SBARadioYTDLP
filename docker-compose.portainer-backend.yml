@@ -36,6 +36,7 @@ services:
       APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:-admin}
       APP_ADMIN_SESSION_TTL_SECONDS: ${APP_ADMIN_SESSION_TTL_SECONDS:-43200}
     volumes:
+      - temp-data:${APP_TEMP_ROOT:-/tmp/sbaradio-ytdlp}
       - ${YTDLP_COOKIE_FILE_HOST_PATH:-/opt/sbaradio-ytdlp/youtube.txt}:/cookies/youtube.txt
     ports:
       - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"
@@ -50,5 +51,31 @@ services:
       retries: ${BACKEND_HEALTHCHECK_RETRIES:-3}
       start_period: ${BACKEND_HEALTHCHECK_START_PERIOD:-30s}
 
+  worker:
+    build:
+      context: ./backend
+    command: ["python", "-m", "app.worker"]
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      APP_TEMP_ROOT: ${APP_TEMP_ROOT:-/tmp/sbaradio-ytdlp}
+      APP_MAX_ACTIVE_JOBS: ${APP_MAX_ACTIVE_JOBS:-1}
+      APP_MAX_PLAYLIST_ITEMS: ${APP_MAX_PLAYLIST_ITEMS:-50}
+      APP_MAX_DURATION_SECONDS: ${APP_MAX_DURATION_SECONDS:-14400}
+      APP_CLEANUP_AFTER_SECONDS: ${APP_CLEANUP_AFTER_SECONDS:-3600}
+      APP_YTDLP_COOKIE_FILE: ${APP_YTDLP_COOKIE_FILE:-/cookies/youtube.txt}
+      APP_YTDLP_COOKIES_FROM_BROWSER: ${APP_YTDLP_COOKIES_FROM_BROWSER:-}
+      APP_REDIS_URL: ${APP_REDIS_URL:-redis://redis:6379/0}
+      APP_REDIS_HEALTHCHECK_TIMEOUT_SECONDS: ${APP_REDIS_HEALTHCHECK_TIMEOUT_SECONDS:-1}
+      APP_REDIS_NAMESPACE: ${APP_REDIS_NAMESPACE:-sbaradio-ytdlp}
+      APP_REDIS_JOB_LOCK_TTL_SECONDS: ${APP_REDIS_JOB_LOCK_TTL_SECONDS:-21600}
+      APP_ADMIN_HISTORY_LIMIT: ${APP_ADMIN_HISTORY_LIMIT:-200}
+    volumes:
+      - temp-data:${APP_TEMP_ROOT:-/tmp/sbaradio-ytdlp}
+      - ${YTDLP_COOKIE_FILE_HOST_PATH:-/opt/sbaradio-ytdlp/youtube.txt}:/cookies/youtube.txt
+
 volumes:
   redis-data:
+  temp-data:

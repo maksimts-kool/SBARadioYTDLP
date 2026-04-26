@@ -154,7 +154,9 @@ APP_YTDLP_COOKIE_FILE=/cookies/youtube.txt
 YTDLP_COOKIE_FILE_HOST_PATH=/opt/sbaradio-ytdlp/youtube.txt
 ```
 
-The backend-only Portainer stack includes Redis. The backend uses it to reserve active download slots across backend instances and to persist job history snapshots for the admin dashboard. If Redis is configured and unreachable, readiness fails and new download creation returns a service-unavailable error instead of silently bypassing shared capacity.
+The backend-only Portainer stack includes Redis and a separate worker container. In this mode the API creates queued jobs in Redis, the worker consumes that queue, Redis reserves active download slots across workers, and job snapshots are persisted for the admin dashboard. The API and worker share the `temp-data` volume so files downloaded by the worker can be served by the API.
+
+If Redis is configured and unreachable, readiness fails and new download creation returns a service-unavailable error instead of silently bypassing the queue.
 
 On the server running Docker, enable memory overcommit so Redis background saves do not fail:
 

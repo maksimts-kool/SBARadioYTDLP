@@ -147,13 +147,16 @@ def create_job(
             entry_ids=entry_ids,
             media_title=clean_media_title(payload.mediaTitle),
             device_id=clean_device_id(x_device_id),
+            enforce_capacity=not redis_job_store.enabled,
+            enqueue=redis_job_store.enabled,
         )
     except RuntimeError as exc:
         if str(exc).startswith("Redis is not reachable:"):
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc)) from exc
 
-    background_tasks.add_task(run_download_job, job, manager, settings)
+    if not redis_job_store.enabled:
+        background_tasks.add_task(run_download_job, job, manager, settings)
     return job.to_response(settings.cleanup_after_seconds)
 
 
@@ -333,7 +336,11 @@ def delete_job_temp(job_id: str, request: Request, _: None = Depends(require_adm
 
 def build_admin_dashboard() -> AdminDashboardResponse:
     jobs = manager.all()
-    current_jobs = sorted([job.to_response() for job in jobs], key=lambda item: item.updatedAt, reverse=True)
+    current_jobs = sorted(
+        [job.to_response() for job in jobs if job.status in ACTIVE_JOB_STATES],
+        key=lambda item: item.updatedAt,
+        reverse=True,
+    )
     job_history = manager.history()
     temp_files = scan_temp_files(settings.temp_root, jobs, job_history, settings.admin_state_path)
     available_files = [file for file in temp_files if file.isOutput and file.downloadUrl]
