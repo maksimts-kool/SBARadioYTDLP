@@ -91,6 +91,8 @@ def run_download_job(job: Job, manager: JobManager, settings: Settings) -> None:
 
         manager.update(job, status=JobState.metadata, message="Reading media information")
         targets = resolve_targets(job, settings)
+        if not job.media_title and len(targets) == 1:
+            manager.update(job, media_title=targets[0].get("title"))
         manager.update(job, total_items=len(targets), message="Starting download")
 
         for position, target in enumerate(targets, start=1):

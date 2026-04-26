@@ -51,12 +51,16 @@ class JobCreateRequest(BaseModel):
     kind: MediaKind
     quality: str = Field(min_length=1, max_length=16)
     entryIds: List[str] = Field(default_factory=list, max_length=50)
+    mediaTitle: Optional[str] = Field(default=None, max_length=300)
     termsAccepted: bool = False
 
 
 class JobStatusResponse(BaseModel):
     jobId: str
     status: JobState
+    mediaKind: MediaKind
+    quality: str
+    mediaTitle: Optional[str] = None
     progress: float = 0
     currentItem: Optional[str] = None
     totalItems: int = 0
@@ -67,6 +71,7 @@ class JobStatusResponse(BaseModel):
     isArchive: bool = False
     createdAt: datetime
     updatedAt: datetime
+    expiresAt: Optional[datetime] = None
 
 
 def utc_now() -> datetime:

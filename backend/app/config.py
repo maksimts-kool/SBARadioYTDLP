@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     ytdlp_cookies_from_browser: str = ""
     redis_url: str = ""
     redis_healthcheck_timeout_seconds: float = 1.0
+    admin_password: str = "admin"
+    admin_session_ttl_seconds: int = 12 * 60 * 60
+    admin_state_file: str = ""
+    admin_history_limit: int = 200
 
     @property
     def allowed_origin_list(self) -> list[str]:
@@ -45,6 +49,11 @@ class Settings(BaseSettings):
     def redis_connection_url(self) -> str | None:
         url = self.redis_url.strip()
         return url or None
+
+    @property
+    def admin_state_path(self) -> Path:
+        path = self.admin_state_file.strip()
+        return Path(path) if path else self.temp_root / "admin-state.json"
 
 
 def normalize_origin(origin: str) -> str:

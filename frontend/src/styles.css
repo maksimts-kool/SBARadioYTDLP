@@ -214,6 +214,16 @@ body {
   animation: none;
 }
 
+.admin-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+.admin-stat {
+  min-height: 88px;
+}
+
 @media (hover: hover) {
   .motion-card:hover {
     box-shadow: 0 18px 42px rgba(37, 99, 235, 0.14);
@@ -333,6 +343,7 @@ body {
 }
 
 @keyframes logo-float {
+
   0%,
   100% {
     transform: translateY(0);
@@ -344,6 +355,7 @@ body {
 }
 
 @keyframes status-breathe-green {
+
   0%,
   100% {
     box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
@@ -355,6 +367,7 @@ body {
 }
 
 @keyframes status-breathe-yellow {
+
   0%,
   100% {
     box-shadow: 0 0 0 0 rgba(234, 179, 8, 0);
@@ -366,6 +379,7 @@ body {
 }
 
 @keyframes status-breathe-red {
+
   0%,
   100% {
     box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
@@ -377,6 +391,7 @@ body {
 }
 
 @keyframes card-sheen {
+
   0%,
   35% {
     transform: translateX(-110%);
@@ -399,6 +414,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {

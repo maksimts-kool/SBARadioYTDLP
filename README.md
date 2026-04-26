@@ -34,6 +34,7 @@ The frontend proxies `/api` and WebSocket progress traffic to the backend contai
 - Show all completed downloads that still have temp files available.
 - Download a finished video/audio file or a ZIP archive for playlist selections.
 - Temporary files are isolated per job and cleaned after the configured TTL.
+- Admin panel at `#admin` with password login, current and historical job status, server-to-browser file transfer history, temp-file cleanup, disk usage, unique visitor IPs, and IP blocking.
 
 ## Configuration
 
@@ -56,6 +57,8 @@ Useful settings:
 - `APP_CLEANUP_AFTER_SECONDS`: how long completed temp files stay available.
 - `APP_YTDLP_COOKIE_FILE`: path inside the backend container to an exported Netscape cookies file.
 - `APP_YTDLP_COOKIES_FROM_BROWSER`: optional `yt-dlp` browser cookie spec, such as `firefox` or `chrome:Default`.
+- `APP_ADMIN_PASSWORD`: password for the admin panel. The local Docker default is `admin`; change it before exposing the backend.
+- `APP_ADMIN_SESSION_TTL_SECONDS`: how long an admin login token remains valid.
 - `YTDLP_COOKIE_FILE_HOST_PATH`: host path to mount as `/cookies/youtube.txt` in Portainer deployments.
 
 ### YouTube Cookies
